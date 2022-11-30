@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="SunLight3D" inherits="Light3D" version="4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Sun briefly.
+	</brief_description>
+	<description>
+		Sun at length.
+	</description>
+	<tutorials>
+		<link title="3D lights and shadows">$DOCS_URL/tutorials/3d/lights_and_shadows.html</link>
+	</tutorials>
+	<members>
+		<member name="sun_max_instances" type="int" setter="set_max_instances" getter="get_max_instances" default="16">
+			The light's attenuation (drop-off) curve. A number of presets are available in the [b]Inspector[/b] by right-clicking the curve.
+		</member>
+	</members>
+</class>

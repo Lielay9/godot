@@ -356,6 +356,7 @@ public:
 #define ServerName RendererLightStorage
 #define server_name RSG::light_storage
 
+	FUNCRIDSPLIT(sun_light)
 	FUNCRIDSPLIT(directional_light)
 	FUNCRIDSPLIT(omni_light)
 	FUNCRIDSPLIT(spot_light)

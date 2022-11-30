@@ -39,6 +39,8 @@ class LightStorage : public RendererLightStorage {
 public:
 	/* Light API */
 
+	virtual RID sun_light_allocate() override { return RID(); }
+	virtual void sun_light_initialize(RID p_rid) override {}
 	virtual RID directional_light_allocate() override { return RID(); }
 	virtual void directional_light_initialize(RID p_rid) override {}
 	virtual RID omni_light_allocate() override { return RID(); }

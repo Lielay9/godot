@@ -412,7 +412,8 @@ public:
 	enum LightType {
 		LIGHT_DIRECTIONAL,
 		LIGHT_OMNI,
-		LIGHT_SPOT
+		LIGHT_SPOT,
+		LIGHT_SUN
 	};
 
 	enum LightParam {
@@ -440,6 +441,7 @@ public:
 		LIGHT_PARAM_MAX
 	};
 
+	virtual RID sun_light_create() = 0;
 	virtual RID directional_light_create() = 0;
 	virtual RID omni_light_create() = 0;
 	virtual RID spot_light_create() = 0;

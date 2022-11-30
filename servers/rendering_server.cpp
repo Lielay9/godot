@@ -1874,6 +1874,7 @@ void RenderingServer::_bind_methods() {
 
 	/* Light API */
 
+	ClassDB::bind_method(D_METHOD("sun_light_create"), &RenderingServer::sun_light_create);
 	ClassDB::bind_method(D_METHOD("directional_light_create"), &RenderingServer::directional_light_create);
 	ClassDB::bind_method(D_METHOD("omni_light_create"), &RenderingServer::omni_light_create);
 	ClassDB::bind_method(D_METHOD("spot_light_create"), &RenderingServer::spot_light_create);

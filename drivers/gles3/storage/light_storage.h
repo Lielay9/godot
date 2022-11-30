@@ -180,6 +180,8 @@ public:
 
 	void _light_initialize(RID p_rid, RS::LightType p_type);
 
+	virtual RID sun_light_allocate() override;
+	virtual void sun_light_initialize(RID p_rid) override;
 	virtual RID directional_light_allocate() override;
 	virtual void directional_light_initialize(RID p_rid) override;
 	virtual RID omni_light_allocate() override;

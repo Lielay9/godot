@@ -511,6 +511,7 @@ void register_scene_types() {
 	GDREGISTER_CLASS(DirectionalLight3D);
 	GDREGISTER_CLASS(OmniLight3D);
 	GDREGISTER_CLASS(SpotLight3D);
+	GDREGISTER_CLASS(SunLight3D);
 	GDREGISTER_CLASS(ReflectionProbe);
 	GDREGISTER_CLASS(Decal);
 	GDREGISTER_CLASS(VoxelGI);
