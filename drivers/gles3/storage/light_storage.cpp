@@ -80,14 +80,6 @@ void LightStorage::_light_initialize(RID p_light, RS::LightType p_type) {
 	light_owner.initialize_rid(p_light, light);
 }
 
-RID LightStorage::sun_light_allocate() {
-	return light_owner.allocate_rid();
-}
-
-void LightStorage::sun_light_initialize(RID p_rid) {
-	_light_initialize(p_rid, RS::LIGHT_SUN);
-}
-
 RID LightStorage::directional_light_allocate() {
 	return light_owner.allocate_rid();
 }

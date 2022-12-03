@@ -156,22 +156,6 @@ public:
 VARIANT_ENUM_CAST(Light3D::Param);
 VARIANT_ENUM_CAST(Light3D::BakeMode);
 
-class SunLight3D : public Light3D {
-	GDCLASS(SunLight3D, Light3D);
-
-private:
-	int max_instances = 16;
-
-protected:
-	static void _bind_methods();
-
-public:
-	void set_max_instances(int p_number);
-	int get_max_instances() const;
-
-	SunLight3D();
-};
-
 class DirectionalLight3D : public Light3D {
 	GDCLASS(DirectionalLight3D, Light3D);
 

@@ -424,9 +424,6 @@ void Light3D::_bind_methods() {
 Light3D::Light3D(RenderingServer::LightType p_type) {
 	type = p_type;
 	switch (p_type) {
-		case RS::LIGHT_SUN:
-			light = RenderingServer::get_singleton()->sun_light_create();
-			break;
 		case RS::LIGHT_DIRECTIONAL:
 			light = RenderingServer::get_singleton()->directional_light_create();
 			break;
@@ -487,26 +484,6 @@ Light3D::~Light3D() {
 }
 
 /////////////////////////////////////////
-
-void SunLight3D::set_max_instances(int p_number) {
-	max_instances = p_number;
-}
-
-int SunLight3D::get_max_instances() const {
-	return max_instances;
-}
-
-void SunLight3D::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("set_max_instances", "number"), &SunLight3D::set_max_instances);
-	ClassDB::bind_method(D_METHOD("get_max_instances"), &SunLight3D::get_max_instances);
-
-	ADD_GROUP("Sun", "sun_");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_instances", PROPERTY_HINT_RANGE, "1,16,1"), "set_max_instances", "get_max_instances");
-}
-
-SunLight3D::SunLight3D() :
-		Light3D(RenderingServer::LIGHT_SUN) {
-}
 
 void DirectionalLight3D::set_shadow_mode(ShadowMode p_mode) {
 	shadow_mode = p_mode;

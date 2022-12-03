@@ -39,9 +39,6 @@ public:
 
 	/* Light API */
 
-	virtual RID sun_light_allocate() = 0;
-	virtual void sun_light_initialize(RID p_rid) = 0;
-
 	virtual RID directional_light_allocate() = 0;
 	virtual void directional_light_initialize(RID p_rid) = 0;
 
