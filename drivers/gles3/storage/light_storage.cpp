@@ -260,6 +260,15 @@ void LightStorage::light_directional_set_shadow_mode(RID p_light, RS::LightDirec
 	light->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_LIGHT);
 }
 
+void LightStorage::light_directional_set_cast_cluster_shadows(RID p_light, bool p_enabled) {
+	Light *light = light_owner.get_or_null(p_light);
+	ERR_FAIL_COND(!light);
+
+	light->cast_cluster_shadows = p_enabled;
+	light->version++;
+	light->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_LIGHT);
+}
+
 void LightStorage::light_directional_set_blend_splits(RID p_light, bool p_enable) {
 	Light *light = light_owner.get_or_null(p_light);
 	ERR_FAIL_COND(!light);

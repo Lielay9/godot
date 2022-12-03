@@ -1218,6 +1218,34 @@ void RendererSceneCull::instance_geometry_set_cast_shadows_setting(RID p_instanc
 	_instance_queue_update(instance, false, true);
 }
 
+void RendererSceneCull::instance_geometry_set_cast_cluster_shadows(RID p_instance, bool p_enabled) {
+	Instance *instance = instance_owner.get_or_null(p_instance);
+	ERR_FAIL_COND(!instance);
+
+	instance->cast_cluster_shadows = p_enabled;
+
+	if (instance->scenario && instance->array_index >= 0) {
+		InstanceData &idata = instance->scenario->instance_data[instance->array_index];
+
+		if (instance->cast_cluster_shadows) {
+			idata.flags |= InstanceData::FLAG_CAST_CLUSTER_SHADOWS;
+		} else {
+			idata.flags &= ~uint32_t(InstanceData::FLAG_CAST_CLUSTER_SHADOWS);
+		}
+	}
+
+	/* Not sure what this is for. */
+
+	//if ((1 << instance->base_type) & RS::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+	//	InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
+	//	ERR_FAIL_NULL(geom->geometry_instance);
+
+	//	geom->geometry_instance->set_cast_double_sided_shadows(instance->cast_shadows == RS::SHADOW_CASTING_SETTING_DOUBLE_SIDED);
+	//}
+
+	_instance_queue_update(instance, false, true);
+}
+
 void RendererSceneCull::instance_geometry_set_material_override(RID p_instance, RID p_material) {
 	Instance *instance = instance_owner.get_or_null(p_instance);
 	ERR_FAIL_COND(!instance);

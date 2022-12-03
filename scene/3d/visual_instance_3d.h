@@ -104,6 +104,7 @@ public:
 
 private:
 	ShadowCastingSetting shadow_casting_setting = SHADOW_CASTING_SETTING_ON;
+	bool cast_cluster_shadows;
 	Ref<Material> material_override;
 	Ref<Material> material_overlay;
 
@@ -137,6 +138,9 @@ protected:
 public:
 	void set_cast_shadows_setting(ShadowCastingSetting p_shadow_casting_setting);
 	ShadowCastingSetting get_cast_shadows_setting() const;
+
+	void set_cast_cluster_shadows(bool p_enable);
+	bool is_cast_cluster_shadows_enabled() const;
 
 	void set_transparency(float p_transparency);
 	float get_transparency() const;

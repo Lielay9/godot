@@ -66,6 +66,7 @@ private:
 		Color color = Color(1, 1, 1, 1);
 		RID projector;
 		bool shadow = false;
+		bool cast_cluster_shadows = false;
 		bool negative = false;
 		bool reverse_cull = false;
 		RS::LightBakeMode bake_mode = RS::LIGHT_BAKE_DYNAMIC;
@@ -477,6 +478,7 @@ public:
 	virtual void light_omni_set_shadow_mode(RID p_light, RS::LightOmniShadowMode p_mode) override;
 
 	virtual void light_directional_set_shadow_mode(RID p_light, RS::LightDirectionalShadowMode p_mode) override;
+	virtual void light_directional_set_cast_cluster_shadows(RID p_light, bool p_enabled) override;
 	virtual void light_directional_set_blend_splits(RID p_light, bool p_enable) override;
 	virtual bool light_directional_get_blend_splits(RID p_light) const override;
 	virtual void light_directional_set_sky_mode(RID p_light, RS::LightDirectionalSkyMode p_mode) override;

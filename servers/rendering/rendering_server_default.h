@@ -374,6 +374,7 @@ public:
 	FUNC2(light_omni_set_shadow_mode, RID, LightOmniShadowMode)
 
 	FUNC2(light_directional_set_shadow_mode, RID, LightDirectionalShadowMode)
+	FUNC2(light_directional_set_cast_cluster_shadows, RID, bool)
 	FUNC2(light_directional_set_blend_splits, RID, bool)
 	FUNC2(light_directional_set_sky_mode, RID, LightDirectionalSkyMode)
 
@@ -785,6 +786,7 @@ public:
 
 	FUNC3(instance_geometry_set_flag, RID, InstanceFlags, bool)
 	FUNC2(instance_geometry_set_cast_shadows_setting, RID, ShadowCastingSetting)
+	FUNC2(instance_geometry_set_cast_cluster_shadows, RID, bool)
 	FUNC2(instance_geometry_set_material_override, RID, RID)
 	FUNC2(instance_geometry_set_material_overlay, RID, RID)
 

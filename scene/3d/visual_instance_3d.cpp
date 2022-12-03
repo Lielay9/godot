@@ -291,6 +291,16 @@ GeometryInstance3D::ShadowCastingSetting GeometryInstance3D::get_cast_shadows_se
 	return shadow_casting_setting;
 }
 
+void GeometryInstance3D::set_cast_cluster_shadows(bool p_enable) {
+	cast_cluster_shadows = p_enable;
+
+	RS::get_singleton()->instance_geometry_set_cast_cluster_shadows(get_instance(), p_enable);
+}
+
+bool GeometryInstance3D::is_cast_cluster_shadows_enabled() const {
+	return cast_cluster_shadows;
+}
+
 void GeometryInstance3D::set_extra_cull_margin(float p_margin) {
 	ERR_FAIL_COND(p_margin < 0);
 	extra_cull_margin = p_margin;
@@ -404,6 +414,9 @@ void GeometryInstance3D::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_cast_shadows_setting", "shadow_casting_setting"), &GeometryInstance3D::set_cast_shadows_setting);
 	ClassDB::bind_method(D_METHOD("get_cast_shadows_setting"), &GeometryInstance3D::get_cast_shadows_setting);
+
+	ClassDB::bind_method(D_METHOD("set_cast_cluster_shadows", "cast_cluster_shadows"), &GeometryInstance3D::set_cast_cluster_shadows);
+	ClassDB::bind_method(D_METHOD("is_cast_cluster_shadows_enabled"), &GeometryInstance3D::is_cast_cluster_shadows_enabled);
 
 	ClassDB::bind_method(D_METHOD("set_lod_bias", "bias"), &GeometryInstance3D::set_lod_bias);
 	ClassDB::bind_method(D_METHOD("get_lod_bias"), &GeometryInstance3D::get_lod_bias);

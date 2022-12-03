@@ -491,6 +491,16 @@ void DirectionalLight3D::set_shadow_mode(ShadowMode p_mode) {
 	notify_property_list_changed();
 }
 
+void DirectionalLight3D::set_cast_cluster_shadows(bool p_enable) {
+	cast_cluster_shadows = p_enable;
+
+	RS::get_singleton()->light_directional_set_cast_cluster_shadows(light, p_enable);
+}
+
+bool DirectionalLight3D::is_cast_cluster_shadows_enabled() const {
+	return cast_cluster_shadows;
+}
+
 DirectionalLight3D::ShadowMode DirectionalLight3D::get_shadow_mode() const {
 	return shadow_mode;
 }
@@ -543,6 +553,9 @@ void DirectionalLight3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_blend_splits", "enabled"), &DirectionalLight3D::set_blend_splits);
 	ClassDB::bind_method(D_METHOD("is_blend_splits_enabled"), &DirectionalLight3D::is_blend_splits_enabled);
 
+	ClassDB::bind_method(D_METHOD("set_cast_cluster_shadows", "enabled"), &DirectionalLight3D::set_cast_cluster_shadows);
+	ClassDB::bind_method(D_METHOD("is_cast_cluster_shadows_enabled"), &DirectionalLight3D::is_cast_cluster_shadows_enabled);
+
 	ClassDB::bind_method(D_METHOD("set_sky_mode", "mode"), &DirectionalLight3D::set_sky_mode);
 	ClassDB::bind_method(D_METHOD("get_sky_mode"), &DirectionalLight3D::get_sky_mode);
 
@@ -576,6 +589,7 @@ DirectionalLight3D::DirectionalLight3D() :
 	set_param(PARAM_INTENSITY, 100000.0); // Specified in Lux, approximate mid-day sun.
 	set_shadow_mode(SHADOW_PARALLEL_4_SPLITS);
 	blend_splits = false;
+	cast_cluster_shadows = false;
 	set_sky_mode(SKY_MODE_LIGHT_AND_SKY);
 }
 

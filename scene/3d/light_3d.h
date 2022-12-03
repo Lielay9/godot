@@ -174,6 +174,7 @@ public:
 
 private:
 	bool blend_splits;
+	bool cast_cluster_shadows;
 	ShadowMode shadow_mode;
 	SkyMode sky_mode = SKY_MODE_LIGHT_AND_SKY;
 
@@ -187,6 +188,9 @@ public:
 
 	void set_blend_splits(bool p_enable);
 	bool is_blend_splits_enabled() const;
+
+	void set_cast_cluster_shadows(bool p_enable);
+	bool is_cast_cluster_shadows_enabled() const;
 
 	void set_sky_mode(SkyMode p_mode);
 	SkyMode get_sky_mode() const;
