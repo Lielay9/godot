@@ -127,6 +127,11 @@ layout(set = 0, binding = 14, std430) restrict readonly buffer GlobalShaderUnifo
 }
 global_shader_uniforms;
 
+layout(set = 0, binding = 15, std430) restrict readonly buffer ClusterShadows {
+	ClusterShadowData data[];
+}
+cluster_shadows;
+
 /* Set 1: Render Pass (changes per render pass) */
 
 layout(set = 1, binding = 0, std140) uniform SceneDataBlock {
@@ -153,6 +158,8 @@ layout(set = 1, binding = 5) uniform highp texture2D directional_shadow_atlas;
 
 // this needs to change to providing just the lightmap we're using..
 layout(set = 1, binding = 6) uniform texture2DArray lightmap_textures[MAX_LIGHTMAP_TEXTURES];
+
+layout(set = 1, binding = 7) uniform highp texture2D cluster_shadow_atlas;
 
 layout(set = 1, binding = 9) uniform highp texture2D depth_buffer;
 layout(set = 1, binding = 10) uniform mediump texture2D color_buffer;

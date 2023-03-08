@@ -1515,9 +1515,36 @@ void main() {
 			} else {
 				shadow = float(shadow1 >> ((i - 4) * 8) & 0xFF) / 255.0;
 			}
+			// CLUSTER SHADOWS BEGIN
+			float c_shadow = 1.0;
+			//vec3 cluster_shadow_uv = vec3(0.0, 0.0, 0.0);
+			for (uint i = 0; i < scene_data.cluster_shadow_count; i++) {
+				// Light direction is in camera-view space as is normal
+				vec3 light_dir = directional_lights.data[i].direction;
+
+				vec3 normal_bias = normal * (1.0 - max(0.0, dot(light_dir, -normal))) * cluster_shadows.data[i].shadow_normal_bias;
+				normal_bias -= light_dir * dot(light_dir, normal_bias);
+				vec3 bias = light_dir * cluster_shadows.data[i].shadow_bias;
+
+				vec4 shadow_map_coord = cluster_shadows.data[i].shadow_matrix * vec4(vertex + normal_bias + bias, 1.0);
+				// To sample inside the bounding box, cap depth
+				shadow_map_coord.z = min(0.999, shadow_map_coord.z);
+				vec2 atlas_size = cluster_shadows.data[i].atlas_rect.zw;
+				if(shadow_map_coord.x < 0.0 || shadow_map_coord.x > atlas_size.x || shadow_map_coord.y < 0.0 || shadow_map_coord.y > atlas_size.y){
+					continue;
+				}
+
+				vec2 cluster_shadow_pixel_size = atlas_size;
+				c_shadow = sample_directional_pcf_shadow(cluster_shadow_atlas, /*cluster_shadows.data[i].soft_shadow_scale * */ cluster_shadow_pixel_size, shadow_map_coord);
+				//cluster_shadow_uv = vec3(c_shadow);
+				
+			}
+			shadow = min(shadow, c_shadow);
+			shadow = c_shadow;
+			// CLUSTER SHADOWS END
 #endif
 			blur_shadow(shadow);
-
+			//light_compute(normal, directional_lights.data[i].direction, normalize(view), 0.0, cluster_shadow_uv, shadow, f0, orms, 1.0, albedo, alpha,
 			light_compute(normal, directional_lights.data[i].direction, normalize(view), 0.0, directional_lights.data[i].color * directional_lights.data[i].energy, shadow, f0, orms, 1.0, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 					backlight,

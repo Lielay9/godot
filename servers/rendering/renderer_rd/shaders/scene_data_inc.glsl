@@ -63,7 +63,8 @@ struct SceneData {
 	float IBL_exposure_normalization;
 
 	bool pancake_shadows;
-	uint pad1;
+	uint cluster_shadow_count;
+	//uint pad1;
 	uint pad2;
 	uint pad3;
 };

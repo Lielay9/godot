@@ -172,6 +172,13 @@ public:
 	virtual void lightmap_instance_free(RID p_lightmap) = 0;
 	virtual void lightmap_instance_set_transform(RID p_lightmap, const Transform3D &p_transform) = 0;
 
+	/* CLUSTER SHADOW ATLAS */
+	virtual RID cluster_shadow_atlas_create() = 0;
+	virtual void cluster_shadow_atlas_free(RID p_atlas) = 0;
+
+	virtual void cluster_shadow_atlas_update(RID p_atlas) = 0;
+	virtual void cluster_shadow_atlas_set_size(RID p_atlas, int p_width, int p_height, bool p_use_16_bits = true) = 0;
+
 	/* SHADOW ATLAS */
 
 	virtual RID shadow_atlas_create() = 0;

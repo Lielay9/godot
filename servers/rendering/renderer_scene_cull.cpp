@@ -1222,26 +1222,21 @@ void RendererSceneCull::instance_geometry_set_cast_cluster_shadows(RID p_instanc
 	Instance *instance = instance_owner.get_or_null(p_instance);
 	ERR_FAIL_COND(!instance);
 
-	instance->cast_cluster_shadows = p_enabled;
-
 	if (instance->scenario && instance->array_index >= 0) {
 		InstanceData &idata = instance->scenario->instance_data[instance->array_index];
 
-		if (instance->cast_cluster_shadows) {
+		if (p_enabled) {
 			idata.flags |= InstanceData::FLAG_CAST_CLUSTER_SHADOWS;
 		} else {
 			idata.flags &= ~uint32_t(InstanceData::FLAG_CAST_CLUSTER_SHADOWS);
 		}
+
+		if (p_enabled) {
+			instance->scenario->cluster_shadow_casters.push_back(instance);
+		} else {
+			instance->scenario->cluster_shadow_casters.erase(instance);
+		}
 	}
-
-	/* Not sure what this is for. */
-
-	//if ((1 << instance->base_type) & RS::INSTANCE_GEOMETRY_MASK && instance->base_data) {
-	//	InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
-	//	ERR_FAIL_NULL(geom->geometry_instance);
-
-	//	geom->geometry_instance->set_cast_double_sided_shadows(instance->cast_shadows == RS::SHADOW_CASTING_SETTING_DOUBLE_SIDED);
-	//}
 
 	_instance_queue_update(instance, false, true);
 }
@@ -2489,7 +2484,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 	return animated_material_found;
 }
 
-void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, bool p_use_taa, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderInfo *r_render_info) {
+void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, bool p_use_taa, float p_screen_mesh_lod_threshold, RID p_cluster_shadow_atlas, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderInfo *r_render_info) {
 #ifndef _3D_DISABLED
 
 	Camera *camera = camera_owner.get_or_null(p_camera);
@@ -2576,7 +2571,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	// For now just cull on the first camera
 	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport, camera_data.main_transform, camera_data.main_projection, camera_data.is_orthogonal);
 
-	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, true, r_render_info);
+	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, camera->visible_layers, p_scenario, p_viewport, p_cluster_shadow_atlas, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, true, r_render_info);
 #endif
 }
 
@@ -2904,7 +2899,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 					if (IN_FRUSTUM(cull_data.cull->shadows[j].cascades[k].frustum) && VIS_CHECK) {
 						uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
 
-						if (((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK) && idata.flags & InstanceData::FLAG_CAST_SHADOWS) {
+						if (((1 << base_type) & RS::INSTANCE_GEOMETRY_MASK) && idata.flags & InstanceData::FLAG_CAST_SHADOWS && !(idata.flags & InstanceData::FLAG_CAST_CLUSTER_SHADOWS)) { // TODO: Verify if cluster shadow check is in good place
 							cull_result.directional_shadows[j].cascade_geometry_instances[k].push_back(idata.instance_geometry);
 							mesh_visible = true;
 						}
@@ -2949,7 +2944,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 	}
 }
 
-void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows, RenderingMethod::RenderInfo *r_render_info) {
+void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_cluster_shadow_atlas, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows, RenderingMethod::RenderInfo *r_render_info) {
 	Instance *render_reflection_probe = instance_owner.get_or_null(p_reflection_probe); //if null, not rendering to it
 
 	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
@@ -3121,11 +3116,31 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	//render shadows
 
 	max_shadows_used = 0;
+	max_cluster_shadows_used = 0;
 
 	if (p_using_shadows) { //setup shadow maps
 
-		// Directional Shadows
+		// TODO: CULL
+		// Cluster Shadows
+		for (Instance *E : scenario->directional_lights) {
+			if (!E->visible) {
+				continue;
+			}
 
+			InstanceLightData *light = static_cast<InstanceLightData *>(E->base_data);
+
+			for (Instance *instance : scenario->cluster_shadow_casters) {
+				if (max_cluster_shadows_used >= MAX_UPDATE_CLUSTER_SHADOWS) {
+					break;
+				}
+				render_cluster_shadow_data[max_cluster_shadows_used].light = light->instance;
+				render_cluster_shadow_data[max_cluster_shadows_used].pass = 0;
+				render_cluster_shadow_data[max_cluster_shadows_used].instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
+				max_cluster_shadows_used++;
+			}
+		}
+
+		// Directional Shadows
 		for (uint32_t i = 0; i < cull.shadow_count; i++) {
 			for (uint32_t j = 0; j < cull.shadows[i].cascade_count; j++) {
 				const Cull::Shadow::Cascade &c = cull.shadows[i].cascades[j];
@@ -3295,11 +3310,17 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");
-	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
+	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_cluster_shadow_atlas, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_cluster_shadow_data, max_cluster_shadows_used, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
 
 	if (p_viewport.is_valid()) {
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
 	}
+
+	// TODO: Remove unless shadow-clusters can have multiple instances
+	for (uint32_t i = 0; i < max_cluster_shadows_used; i++) {
+		render_cluster_shadow_data[i].instances.clear();
+	}
+	max_cluster_shadows_used = 0;
 
 	for (uint32_t i = 0; i < max_shadows_used; i++) {
 		render_shadow_data[i].instances.clear();
@@ -3332,7 +3353,7 @@ RID RendererSceneCull::_render_get_environment(RID p_camera, RID p_scenario) {
 	return RID();
 }
 
-void RendererSceneCull::render_empty_scene(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_scenario, RID p_shadow_atlas) {
+void RendererSceneCull::render_empty_scene(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_scenario, RID p_cluster_shadow_atlas, RID p_shadow_atlas) {
 #ifndef _3D_DISABLED
 	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
 
@@ -3347,10 +3368,10 @@ void RendererSceneCull::render_empty_scene(const Ref<RenderSceneBuffers> &p_rend
 	RendererSceneRender::CameraData camera_data;
 	camera_data.set_camera(Transform3D(), Projection(), true, false);
 
-	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, PagedArray<RenderGeometryInstance *>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), environment, RID(), p_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr);
+	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, PagedArray<RenderGeometryInstance *>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), environment, RID(), p_cluster_shadow_atlas, p_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr);
 #endif
 }
-
+// TODO Also render cluster shadows if necessary
 bool RendererSceneCull::_render_reflection_probe_step(Instance *p_instance, int p_step) {
 	InstanceReflectionProbeData *reflection_probe = static_cast<InstanceReflectionProbeData *>(p_instance->base_data);
 	Scenario *scenario = p_instance->scenario;
@@ -3421,7 +3442,7 @@ bool RendererSceneCull::_render_reflection_probe_step(Instance *p_instance, int 
 		camera_data.set_camera(xform, cm, false, false);
 
 		Ref<RenderSceneBuffers> render_buffers;
-		_render_scene(&camera_data, render_buffers, environment, RID(), RSG::light_storage->reflection_probe_get_cull_mask(p_instance->base), p_instance->scenario->self, RID(), shadow_atlas, reflection_probe->instance, p_step, mesh_lod_threshold, use_shadows);
+		_render_scene(&camera_data, render_buffers, environment, RID(), RSG::light_storage->reflection_probe_get_cull_mask(p_instance->base), p_instance->scenario->self, RID(), RID(), shadow_atlas, reflection_probe->instance, p_step, mesh_lod_threshold, use_shadows);
 
 	} else {
 		//do roughness postprocess step until it believes it's done
@@ -4113,6 +4134,9 @@ RendererSceneCull::RendererSceneCull() {
 	instance_cull_result.set_page_pool(&instance_cull_page_pool);
 	instance_shadow_cull_result.set_page_pool(&instance_cull_page_pool);
 
+	for (uint32_t i = 0; i < MAX_UPDATE_CLUSTER_SHADOWS; i++) {
+		render_cluster_shadow_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);
+	}
 	for (uint32_t i = 0; i < MAX_UPDATE_SHADOWS; i++) {
 		render_shadow_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);
 	}

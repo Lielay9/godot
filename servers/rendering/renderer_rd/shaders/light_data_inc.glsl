@@ -30,6 +30,16 @@ struct LightData { //this structure needs to be as packed as possible
 	highp vec4 projector_rect; //projector rect in srgb decal atlas
 };
 
+struct ClusterShadowData {
+	highp vec3 position;
+	highp float z_range;
+	highp mat4 shadow_matrix;
+	highp vec4 atlas_rect; // rect in the shadow atlas
+	highp float shadow_bias;
+	highp float shadow_normal_bias;
+	uint directional_light_index;
+};
+
 #define REFLECTION_AMBIENT_DISABLED 0
 #define REFLECTION_AMBIENT_ENVIRONMENT 1
 #define REFLECTION_AMBIENT_COLOR 2

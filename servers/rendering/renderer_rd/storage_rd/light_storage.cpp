@@ -551,8 +551,12 @@ void LightStorage::free_light_data() {
 }
 
 void LightStorage::set_max_lights(const uint32_t p_max_lights) {
-	max_lights = p_max_lights;
+	max_cluster_shadows = RendererSceneRender::MAX_CLUSTER_SHADOWS;
+	uint32_t cluster_shadow_buffer_size = max_cluster_shadows * sizeof(ClusterShadowData);
+	cluster_shadows = memnew_arr(ClusterShadowData, max_cluster_shadows);
+	cluster_shadow_buffer = RD::get_singleton()->storage_buffer_create(cluster_shadow_buffer_size);
 
+	max_lights = p_max_lights;
 	uint32_t light_buffer_size = max_lights * sizeof(LightData);
 	omni_lights = memnew_arr(LightData, max_lights);
 	omni_light_buffer = RD::get_singleton()->storage_buffer_create(light_buffer_size);
@@ -568,7 +572,7 @@ void LightStorage::set_max_lights(const uint32_t p_max_lights) {
 	directional_light_buffer = RD::get_singleton()->uniform_buffer_create(directional_light_buffer_size);
 }
 
-void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const PagedArray<RID> &p_lights, const Transform3D &p_camera_transform, RID p_shadow_atlas, bool p_using_shadows, uint32_t &r_directional_light_count, uint32_t &r_positional_light_count, bool &r_directional_light_soft_shadows) {
+void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const PagedArray<RID> &p_lights, const Transform3D &p_camera_transform, RID p_shadow_atlas, bool p_using_shadows, uint32_t &r_directional_light_count, uint32_t &r_positional_light_count, bool &r_directional_light_soft_shadows, RID p_cluster_shadow_atlas, uint32_t &r_cluster_shadow_count) {
 	ForwardIDStorage *forward_id_storage = ForwardIDStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -1001,7 +1005,100 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		r_positional_light_count++;
 	}
 
+	/* CLUSTER SHADOWS */
+
+	cluster_shadow_count = 0;
+	// Hack to get the index for now.
+	RID directional_light_rid = RID();
+	uint32_t directional_light_index = 0;
+
+	for (int i = 0; i < p_render_data->render_cluster_shadow_count; i++) {
+
+		ClusterShadowData &cluster_shadow_data = cluster_shadows[i];
+		LightInstance *light_instance = light_instance_owner.get_or_null(p_render_data->render_cluster_shadows[i].light);
+		Light *light = light_owner.get_or_null(light_instance->light);
+		ERR_CONTINUE(light == nullptr);
+
+		/*---------------------------MOVE OUT-----------------------------------*/
+		Basis inverse_view_matrix = light_instance->transform.basis;
+		Transform3D view_matrix = Transform3D(inverse_view_matrix.inverse(), Vector3(0, 0, 0));
+
+		// Rotate and transform instance AABB corners and create new AABB from the perspective of light-camera (aka orthogonal frustrum).
+		AABB light_camera_aabb;
+		for (int i = 0; i < p_render_data->render_cluster_shadows[i].instances.size(); i++) {
+			AABB instance_aabb = p_render_data->render_cluster_shadows[i].instances[i]->get_aabb();
+			Transform3D modelview_matrix = view_matrix * p_render_data->render_cluster_shadows->instances[i]->get_transform();
+			// TODO; Hei; Figure out if there's a smarter way.
+			if (i == 0) {
+				light_camera_aabb = AABB(modelview_matrix.get_origin(), Vector3(0, 0, 0));
+			}
+			for (int end_point_index = 0; end_point_index < 8; end_point_index++) {
+				light_camera_aabb.expand_to(modelview_matrix.xform(instance_aabb.get_endpoint(end_point_index)));
+			}
+		}
+
+		// TODO; Hei; If calculated from individual AABB:s, camera could fit closer.
+		// Set light-camera position as close to created AABB center as can.
+		Transform3D light_transform = Transform3D(inverse_view_matrix, inverse_view_matrix.xform(light_camera_aabb.get_center() + Vector3(0, 0, light_camera_aabb.size.z / 2.0)));
+		/* -------------------------------------------------------------------- */
+		
+		/* Set position */
+		Vector3 position = light_transform.get_origin();
+		cluster_shadow_data.position[0] = position.x;
+		cluster_shadow_data.position[1] = position.y;
+		cluster_shadow_data.position[2] = position.z;
+
+		/* Set Atlas Rect */
+		Size2 cluster_atlas_size = cluster_shadow_atlas_get_size(p_cluster_shadow_atlas);
+		float max_multiplier = MAX(light_camera_aabb.size.x, light_camera_aabb.size.y);
+		Rect2 atlas_rect = Rect2(Point2(0, 0), Vector2(light_camera_aabb.size.x, light_camera_aabb.size.y) / max_multiplier);
+		cluster_shadow_data.atlas_rect[0] = atlas_rect.position.x;
+		cluster_shadow_data.atlas_rect[1] = atlas_rect.position.y;
+
+		// TODO; Hei; p_cluster_shadow_atlas doesn't exist in this context for some reason.
+		cluster_shadow_data.atlas_rect[2] = atlas_rect.size.x;
+		cluster_shadow_data.atlas_rect[3] = atlas_rect.size.y;
+
+		/* Set shadow_matrix */
+		Projection bias;
+		bias.set_light_bias();
+		Projection rectm;
+		rectm.set_light_atlas_rect(atlas_rect);
+		Projection camera_matrix;
+		camera_matrix.set_orthogonal(-light_camera_aabb.size.x / 2.0, light_camera_aabb.size.x / 2.0, light_camera_aabb.size.y / 2.0, -light_camera_aabb.size.y / 2.0, 0.0, light_camera_aabb.size.z);
+
+		Projection shadow_matrix = rectm * bias * camera_matrix * (inverse_transform * light_transform).inverse();
+		RendererRD::MaterialStorage::store_camera(shadow_matrix, cluster_shadow_data.shadow_matrix);
+
+		/* Set z range */
+		cluster_shadow_data.z_range = light_camera_aabb.size.z; // Not used for anything
+
+		/* Set index */
+		cluster_shadow_data.directional_light_index = directional_light_index; // TODO: get from somewhere
+
+		/* Set bias */
+		// TODO; Hei; Spot and omni don't have bias_scale. Is it needed?
+		float bias_scale = light_camera_aabb.size.z /* * light_data.soft_shadow_scale*/;
+		// TODO; Hei; I actually have no clue what this is for.
+		float shadow_texel_size = float(1.0) / MAX(atlas_rect.size.x * cluster_atlas_size.x, atlas_rect.size.y * cluster_atlas_size.y);
+		cluster_shadow_data.shadow_bias = (light->param[RS::LIGHT_PARAM_SHADOW_BIAS] / 100.0) * bias_scale;
+		cluster_shadow_data.shadow_normal_bias = light->param[RS::LIGHT_PARAM_SHADOW_NORMAL_BIAS] * shadow_texel_size;
+
+		/* Increment counter */
+		cluster_shadow_count++;
+
+		if (p_render_data->render_cluster_shadows[i].light != directional_light_rid) {
+			directional_light_rid = p_render_data->render_cluster_shadows[i].light;
+			directional_light_index++;
+		}
+	}
+
+
 	//update without barriers
+	if (cluster_shadow_count) {
+		RD::get_singleton()->buffer_update(cluster_shadow_buffer, 0, sizeof(ClusterShadowData) * cluster_shadow_count, cluster_shadows, RD::BARRIER_MASK_RASTER | RD::BARRIER_MASK_COMPUTE);
+	}
+
 	if (omni_light_count) {
 		RD::get_singleton()->buffer_update(omni_light_buffer, 0, sizeof(LightData) * omni_light_count, omni_lights, RD::BARRIER_MASK_RASTER | RD::BARRIER_MASK_COMPUTE);
 	}
@@ -1924,6 +2021,56 @@ void LightStorage::lightmap_instance_set_transform(RID p_lightmap, const Transfo
 	LightmapInstance *li = lightmap_instance_owner.get_or_null(p_lightmap);
 	ERR_FAIL_COND(!li);
 	li->transform = p_transform;
+}
+
+/* CLUSTER SHADOW ATLAS API */
+
+RID LightStorage::cluster_shadow_atlas_create() {
+	return cluster_shadow_atlas_owner.make_rid(ClusterShadowAtlas());
+}
+
+void LightStorage::cluster_shadow_atlas_free(RID p_atlas) {
+	cluster_shadow_atlas_set_size(p_atlas, 0, 0);
+	cluster_shadow_atlas_owner.free(p_atlas);
+}
+
+void LightStorage::cluster_shadow_atlas_update(RID p_atlas) {
+	ClusterShadowAtlas *cluster_shadow_atlas = cluster_shadow_atlas_owner.get_or_null(p_atlas);
+	ERR_FAIL_COND(!cluster_shadow_atlas);
+
+	if ((cluster_shadow_atlas->width > 0 && cluster_shadow_atlas->height > 0) && cluster_shadow_atlas->depth.is_null()) {
+		RD::TextureFormat tf;
+		tf.format = cluster_shadow_atlas->use_16_bits ? RD::DATA_FORMAT_D16_UNORM : RD::DATA_FORMAT_D32_SFLOAT;
+		tf.width = cluster_shadow_atlas->width;
+		tf.height = cluster_shadow_atlas->height;
+		tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+		cluster_shadow_atlas->depth = RD::get_singleton()->texture_create(tf, RD::TextureView());
+		Vector<RID> fb_tex;
+		fb_tex.push_back(cluster_shadow_atlas->depth);
+		cluster_shadow_atlas->fb = RD::get_singleton()->framebuffer_create(fb_tex);
+	}
+}
+
+void LightStorage::cluster_shadow_atlas_set_size(RID p_atlas, int p_width, int p_height, bool p_16_bits) {
+	ClusterShadowAtlas *cluster_shadow_atlas = cluster_shadow_atlas_owner.get_or_null(p_atlas);
+	ERR_FAIL_COND(!cluster_shadow_atlas);
+	ERR_FAIL_COND(p_width < 0);
+	ERR_FAIL_COND(p_height < 0);
+
+	if (p_width == cluster_shadow_atlas->width && p_height == cluster_shadow_atlas->height && p_16_bits == cluster_shadow_atlas->use_16_bits) {
+		return;
+	}
+
+	// erasing atlas
+	if (cluster_shadow_atlas->depth.is_valid()) {
+		RD::get_singleton()->free(cluster_shadow_atlas->depth);
+		cluster_shadow_atlas->depth = RID();
+	}
+
+	cluster_shadow_atlas->width = p_width;
+	cluster_shadow_atlas->height = p_height;
+	cluster_shadow_atlas->use_16_bits = p_16_bits;
 }
 
 /* SHADOW ATLAS API */

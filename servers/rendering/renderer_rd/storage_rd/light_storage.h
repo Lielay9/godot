@@ -133,6 +133,22 @@ private:
 
 	mutable RID_Owner<LightInstance> light_instance_owner;
 
+	/* CLUSTER SHADOW DATA */
+	struct ClusterShadowData {
+		float position[3];
+		float z_range;
+		float shadow_matrix[16];
+		float atlas_rect[4];
+		float shadow_bias;
+		float shadow_normal_bias;
+		uint32_t directional_light_index; // TODO: Could fit in 4 bits as 8 is max directional light count.
+	};
+
+	uint32_t max_cluster_shadows;
+	uint32_t cluster_shadow_count = 0;
+	ClusterShadowData *cluster_shadows = nullptr;
+	RID cluster_shadow_buffer;
+
 	/* OMNI/SPOT LIGHT DATA */
 
 	struct LightData {
@@ -360,6 +376,18 @@ private:
 	};
 
 	mutable RID_Owner<LightmapInstance> lightmap_instance_owner;
+
+	/* CLUSTER SHADOW ATLAS */
+	struct ClusterShadowAtlas {
+		int width = 0;
+		int height = 0;
+		bool use_16_bits = true;
+
+		RID depth;
+		RID fb; //for copying
+	};
+
+	RID_Owner<ClusterShadowAtlas> cluster_shadow_atlas_owner;
 
 	/* SHADOW ATLAS */
 
@@ -762,6 +790,7 @@ public:
 
 	void free_light_data();
 	void set_max_lights(const uint32_t p_max_lights);
+	RID get_cluster_shadow_buffer() { return cluster_shadow_buffer; }
 	RID get_omni_light_buffer() { return omni_light_buffer; }
 	RID get_spot_light_buffer() { return spot_light_buffer; }
 	RID get_directional_light_buffer() { return directional_light_buffer; }
@@ -774,7 +803,7 @@ public:
 		}
 		return false;
 	}
-	void update_light_buffers(RenderDataRD *p_render_data, const PagedArray<RID> &p_lights, const Transform3D &p_camera_transform, RID p_shadow_atlas, bool p_using_shadows, uint32_t &r_directional_light_count, uint32_t &r_positional_light_count, bool &r_directional_light_soft_shadows);
+	void update_light_buffers(RenderDataRD *p_render_data, const PagedArray<RID> &p_lights, const Transform3D &p_camera_transform, RID p_shadow_atlas, bool p_using_shadows, uint32_t &r_directional_light_count, uint32_t &r_positional_light_count, bool &r_directional_light_soft_shadows, RID p_cluster_shadow_atlas, uint32_t &r_cluster_shadow_count);
 
 	/* REFLECTION PROBE */
 
@@ -990,6 +1019,33 @@ public:
 	_FORCE_INLINE_ Transform3D lightmap_instance_get_transform(RID p_lightmap_instance) {
 		LightmapInstance *li = lightmap_instance_owner.get_or_null(p_lightmap_instance);
 		return li->transform;
+	}
+
+	/* CLUSTER SHADOW ATLAS API */
+	bool owns_cluster_shadow_atlas(RID p_rid) { return cluster_shadow_atlas_owner.owns(p_rid); };
+
+	virtual RID cluster_shadow_atlas_create() override;
+	virtual void cluster_shadow_atlas_free(RID p_atlas) override;
+
+	virtual void cluster_shadow_atlas_update(RID p_atlas) override;
+	virtual void cluster_shadow_atlas_set_size(RID p_atlas, int p_width, int p_height, bool p_16_bits = true) override;
+
+	_FORCE_INLINE_ Size2i cluster_shadow_atlas_get_size(RID p_atlas) {
+		ClusterShadowAtlas *atlas = cluster_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_COND_V(!atlas, Size2i());
+		return Size2i(atlas->width, atlas->height);
+	}
+
+	_FORCE_INLINE_ RID cluster_shadow_atlas_get_texture(RID p_atlas) {
+		ClusterShadowAtlas *atlas = cluster_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_COND_V(!atlas, RID());
+		return atlas->depth;
+	}
+
+	_FORCE_INLINE_ RID cluster_shadow_atlas_get_fb(RID p_atlas) {
+		ClusterShadowAtlas *atlas = cluster_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_COND_V(!atlas, RID());
+		return atlas->fb;
 	}
 
 	/* SHADOW ATLAS API */

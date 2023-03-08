@@ -104,7 +104,7 @@ public:
 
 private:
 	ShadowCastingSetting shadow_casting_setting = SHADOW_CASTING_SETTING_ON;
-	bool cast_cluster_shadows;
+	bool cast_cluster_shadows = false;
 	Ref<Material> material_override;
 	Ref<Material> material_overlay;
 

@@ -102,6 +102,9 @@ public:
 		int shadow_atlas_size = 2048;
 		bool shadow_atlas_16_bits = true;
 
+		RID cluster_shadow_atlas;
+		bool cluster_shadow_atlast_16_bits = true;
+
 		bool sdf_active = false;
 
 		float mesh_lod_threshold = 1.0;

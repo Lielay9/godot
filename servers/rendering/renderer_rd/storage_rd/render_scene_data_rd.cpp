@@ -104,6 +104,7 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RS::ViewportDebugDraw p
 
 	ubo.time = time;
 
+	ubo.cluster_shadow_count = cluster_shadow_count;
 	ubo.directional_light_count = directional_light_count;
 	ubo.dual_paraboloid_side = dual_paraboloid_side;
 	ubo.opaque_prepass_threshold = opaque_prepass_threshold;

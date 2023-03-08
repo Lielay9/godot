@@ -63,6 +63,7 @@ public:
 	float lod_distance_multiplier = 0.0;
 	float screen_mesh_lod_threshold = 0.0;
 
+	uint32_t cluster_shadow_count = 0;
 	uint32_t directional_light_count = 0;
 	float dual_paraboloid_side = 0.0;
 	float opaque_prepass_threshold = 0.0;
@@ -142,7 +143,8 @@ private:
 		float IBL_exposure_normalization; // Adjusts for baked exposure.
 
 		uint32_t pancake_shadows;
-		uint32_t pad1;
+		uint32_t cluster_shadow_count;
+		//uint32_t pad1;
 		uint32_t pad2;
 		uint32_t pad3;
 	};

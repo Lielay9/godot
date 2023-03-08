@@ -692,6 +692,21 @@ void LightStorage::canvas_light_occluder_set_polylines(RID p_occluder, const Poo
 }
 */
 
+/* CLUSTER SHADOW ATLAS API */
+
+RID LightStorage::cluster_shadow_atlas_create() {
+	return RID();
+}
+
+void LightStorage::cluster_shadow_atlas_free(RID p_atlas) {
+}
+
+void LightStorage::cluster_shadow_atlas_update(RID p_atlas) {
+}
+
+void LightStorage::cluster_shadow_atlas_set_size(RID p_atlas, int p_width, int p_height, bool p_16_bits) {
+}
+
 /* SHADOW ATLAS API */
 
 RID LightStorage::shadow_atlas_create() {

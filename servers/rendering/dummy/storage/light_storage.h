@@ -61,6 +61,7 @@ public:
 
 	virtual void light_omni_set_shadow_mode(RID p_light, RS::LightOmniShadowMode p_mode) override {}
 
+	virtual void light_directional_set_cast_cluster_shadows(RID p_light, bool p_enabled) override {}
 	virtual void light_directional_set_shadow_mode(RID p_light, RS::LightDirectionalShadowMode p_mode) override {}
 	virtual void light_directional_set_blend_splits(RID p_light, bool p_enable) override {}
 	virtual bool light_directional_get_blend_splits(RID p_light) const override { return false; }
@@ -163,6 +164,14 @@ public:
 	RID lightmap_instance_create(RID p_lightmap) override { return RID(); }
 	void lightmap_instance_free(RID p_lightmap) override {}
 	void lightmap_instance_set_transform(RID p_lightmap, const Transform3D &p_transform) override {}
+
+	/* CLUSTER SHADOW ATLAS API */
+	virtual RID cluster_shadow_atlas_create() override { return RID(); }
+	virtual void cluster_shadow_atlas_set_size(RID p_atlas, int p_width, int p_height, bool p_16_bits = true) override {}
+
+	virtual void cluster_shadow_atlas_free(RID p_atlas) override {}
+	virtual void cluster_shadow_atlas_update(RID p_atlas) override {}
+
 
 	/* SHADOW ATLAS API */
 	virtual RID shadow_atlas_create() override { return RID(); }

@@ -417,6 +417,30 @@ public:
 	virtual void lightmap_instance_free(RID p_lightmap) override;
 	virtual void lightmap_instance_set_transform(RID p_lightmap, const Transform3D &p_transform) override;
 
+	/* CLUSTER SHADOW ATLAS API */
+	virtual RID cluster_shadow_atlas_create() override;
+	virtual void cluster_shadow_atlas_free(RID p_atlas) override;
+
+	virtual void cluster_shadow_atlas_update(RID p_atlas) override;
+	virtual void cluster_shadow_atlas_set_size(RID p_atlas, int p_width, int p_height, bool p_16_bits = true) override;
+
+	//_FORCE_INLINE_ Size2i cluster_shadow_atlas_get_size(RID p_atlas) {
+	//	ClusterShadowAtlas *atlas = cluster_shadow_atlas_owner.get_or_null(p_atlas);
+	//	ERR_FAIL_COND_V(!atlas, Size2i());
+	//	return Size2i(atlas->width, atlas->height);
+	//}
+
+	//_FORCE_INLINE_ RID cluster_shadow_atlas_get_texture(RID p_atlas) {
+	//	ClusterShadowAtlas *atlas = cluster_shadow_atlas_owner.get_or_null(p_atlas);
+	//	ERR_FAIL_COND_V(!atlas, RID());
+	//	return atlas->depth;
+	//}
+
+	//_FORCE_INLINE_ RID cluster_shadow_atlas_get_fb(RID p_atlas) {
+	//	ClusterShadowAtlas *atlas = cluster_shadow_atlas_owner.get_or_null(p_atlas);
+	//	ERR_FAIL_COND_V(!atlas, RID());
+	//	return atlas->fb;
+	//}
 	/* SHADOW ATLAS API */
 
 	virtual RID shadow_atlas_create() override;

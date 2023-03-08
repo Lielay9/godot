@@ -52,8 +52,9 @@ public:
 	enum {
 		SDFGI_MAX_CASCADES = 8,
 		SDFGI_MAX_REGIONS_PER_CASCADE = 3,
+		MAX_UPDATE_CLUSTER_SHADOWS = 16,
 		MAX_INSTANCE_PAIRS = 32,
-		MAX_UPDATE_SHADOWS = 512
+		MAX_UPDATE_SHADOWS = 512,
 	};
 
 	uint64_t render_pass;
@@ -319,6 +320,7 @@ public:
 		RID self;
 
 		List<Instance *> directional_lights;
+		List<Instance *> cluster_shadow_casters;
 		RID environment;
 		RID fallback_environment;
 		RID camera_attributes;
@@ -400,7 +402,6 @@ public:
 		Vector<RID> materials;
 
 		RS::ShadowCastingSetting cast_shadows;
-		bool cast_cluster_shadows;
 
 		uint32_t layer_mask;
 		//fit in 32 bits
@@ -914,6 +915,9 @@ public:
 	InstanceCullResult scene_cull_result;
 	LocalVector<InstanceCullResult> scene_cull_result_threads;
 
+	RendererSceneRender::RenderShadowData render_cluster_shadow_data[MAX_UPDATE_CLUSTER_SHADOWS];
+	uint32_t max_cluster_shadows_used = 0;
+
 	RendererSceneRender::RenderShadowData render_shadow_data[MAX_UPDATE_SHADOWS];
 	uint32_t max_shadows_used = 0;
 
@@ -961,8 +965,8 @@ public:
 	virtual Vector<ObjectID> instances_cull_convex(const Vector<Plane> &p_convex, RID p_scenario = RID()) const;
 
 	virtual void instance_geometry_set_flag(RID p_instance, RS::InstanceFlags p_flags, bool p_enabled);
-	virtual void instance_geometry_set_cast_shadows_setting(RID p_instance, RS::ShadowCastingSetting p_shadow_casting_setting);
 	virtual void instance_geometry_set_cast_cluster_shadows(RID p_instance, bool p_enabled);
+	virtual void instance_geometry_set_cast_shadows_setting(RID p_instance, RS::ShadowCastingSetting p_shadow_casting_setting);
 	virtual void instance_geometry_set_material_override(RID p_instance, RID p_material);
 	virtual void instance_geometry_set_material_overlay(RID p_instance, RID p_material);
 
@@ -1058,10 +1062,10 @@ public:
 	_FORCE_INLINE_ bool _visibility_parent_check(const CullData &p_cull_data, const InstanceData &p_instance_data);
 
 	bool _render_reflection_probe_step(Instance *p_instance, int p_step);
-	void _render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows = true, RenderInfo *r_render_info = nullptr);
-	void render_empty_scene(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_scenario, RID p_shadow_atlas);
+	void _render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_cluster_shadow_atlas, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows = true, RenderInfo *r_render_info = nullptr);
+	void render_empty_scene(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_scenario, RID p_cluster_shadow_atlas, RID p_shadow_atlas);
 
-	void render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, bool p_use_taa, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderingMethod::RenderInfo *r_render_info = nullptr);
+	void render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, bool p_use_taa, float p_screen_mesh_lod_threshold, RID p_cluster_shadow_atlas, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderingMethod::RenderInfo *r_render_info = nullptr);
 	void update_dirty_instances();
 
 	void render_particle_colliders();

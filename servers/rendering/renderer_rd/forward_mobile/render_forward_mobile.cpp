@@ -450,6 +450,21 @@ RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_
 
 		uniforms.push_back(u);
 	}
+	//TODO: Not valid binding for clustered renderer.
+	{
+		RD::Uniform u;
+		u.binding = 7;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		RID texture;
+		if (p_render_data && p_render_data->cluster_shadow_atlas.is_valid()) {
+			texture = light_storage->cluster_shadow_atlas_get_texture(p_render_data->cluster_shadow_atlas);
+		}
+		if (!texture.is_valid()) {
+			texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_DEPTH);
+		}
+		u.append_id(texture);
+		uniforms.push_back(u);
+	}
 
 	/*
 	{
@@ -597,6 +612,12 @@ void RenderForwardMobile::_pre_opaque_render(RenderDataRD *p_render_data) {
 	if (render_shadows) {
 		_render_shadow_begin();
 
+		//Create cluster shadow pass
+		for (int i = 0; i < p_render_data->render_cluster_shadow_count; i++) {
+			// TODO: likely causes crashing
+			_render_shadow_pass(p_render_data->render_cluster_shadows[i].light, p_render_data->cluster_shadow_atlas, p_render_data->render_cluster_shadows[i].pass, p_render_data->render_cluster_shadows[i].instances, camera_plane, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->render_cluster_shadow_count - 1, true, p_render_data->render_info, true);
+		}
+
 		//render directional shadows
 		for (uint32_t i = 0; i < p_render_data->directional_shadows.size(); i++) {
 			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, camera_plane, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info);
@@ -627,7 +648,9 @@ void RenderForwardMobile::_pre_opaque_render(RenderDataRD *p_render_data) {
 
 	uint32_t directional_light_count = 0;
 	uint32_t positional_light_count = 0;
-	light_storage->update_light_buffers(p_render_data, *p_render_data->lights, p_render_data->scene_data->cam_transform, p_render_data->shadow_atlas, using_shadows, directional_light_count, positional_light_count, p_render_data->directional_light_soft_shadows);
+	uint32_t cluster_shadow_count = 0;
+
+	light_storage->update_light_buffers(p_render_data, *p_render_data->lights, p_render_data->scene_data->cam_transform, p_render_data->shadow_atlas, using_shadows, directional_light_count, positional_light_count, p_render_data->directional_light_soft_shadows, p_render_data->cluster_shadow_atlas, cluster_shadow_count);
 	texture_storage->update_decal_buffer(*p_render_data->decals, p_render_data->scene_data->cam_transform.affine_inverse());
 
 	p_render_data->directional_light_count = directional_light_count;
@@ -891,6 +914,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 		RD::get_singleton()->draw_command_begin_label("Render Opaque Subpass");
 
 		p_render_data->scene_data->directional_light_count = p_render_data->directional_light_count;
+		p_render_data->scene_data->cluster_shadow_count = p_render_data->render_cluster_shadow_count; // TODO; Hei; verify location
 
 		_setup_environment(p_render_data, p_render_data->reflection_probe.is_valid(), screen_size, !p_render_data->reflection_probe.is_valid(), p_default_bg_color, p_render_data->render_buffers.is_valid());
 
@@ -1065,13 +1089,13 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 	}
 
 	if (rb.is_valid()) {
-		_render_buffers_debug_draw(rb, p_render_data->shadow_atlas, p_render_data->occluder_debug_tex);
+		_render_buffers_debug_draw(rb, p_render_data->shadow_atlas, p_render_data->occluder_debug_tex, p_render_data->cluster_shadow_atlas);
 	}
 }
 
 /* these are being called from RendererSceneRenderRD::_pre_opaque_render */
 
-void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, const Plane &p_camera_plane, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingMethod::RenderInfo *p_render_info) {
+void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, const Plane &p_camera_plane, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingMethod::RenderInfo *p_render_info, bool is_cluster_shadow) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	ERR_FAIL_COND(!light_storage->owns_light_instance(p_light));
@@ -1098,7 +1122,52 @@ void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, i
 	Projection light_projection;
 	Transform3D light_transform;
 
-	if (light_storage->light_get_type(base) == RS::LIGHT_DIRECTIONAL) {
+	if (is_cluster_shadow) {
+
+		ERR_FAIL_COND(!light_storage->owns_cluster_shadow_atlas(p_shadow_atlas));
+
+		RSG::light_storage->cluster_shadow_atlas_update(p_shadow_atlas);
+
+		render_fb = light_storage->cluster_shadow_atlas_get_fb(p_shadow_atlas);
+
+		/* MIRRORD IN LIGHTSTORAGE UPDATE BUFFERS */
+
+		//*---------------------------MOVE OUT-----------------------------------*/
+		Basis inverse_view_matrix = light_storage->light_instance_get_base_transform(p_light).basis;
+		Transform3D view_matrix = Transform3D(inverse_view_matrix.inverse(), Vector3(0, 0, 0));
+
+		// Rotate and transform instance AABB corners and create new AABB from the perspective of light-camera (aka orthogonal frustrum).
+		AABB light_camera_aabb;
+		for (int i = 0; i < p_instances.size(); i++) {
+			AABB instance_aabb = p_instances[i]->get_aabb();
+			Transform3D modelview_matrix = view_matrix * p_instances[i]->get_transform();
+			// TODO; Hei; Figure out if there's a smarter way.
+			if (i == 0) {
+				light_camera_aabb = AABB(modelview_matrix.get_origin(), Vector3(0, 0, 0));
+			}
+			for (int end_point_index = 0; end_point_index < 8; end_point_index++) {
+				light_camera_aabb.expand_to(modelview_matrix.xform(instance_aabb.get_endpoint(end_point_index)));
+			}
+		}
+
+		// TODO; Hei; If calculated from individual AABB:s, camera could fit closer.
+		// Set light-camera position as close to created AABB center as can.
+		light_transform = Transform3D(inverse_view_matrix, inverse_view_matrix.xform(light_camera_aabb.get_center() + Vector3(0, 0, light_camera_aabb.size.z / 2.0)));
+		/* -------------------------------------------------------------------- */
+		zfar = light_camera_aabb.size.z;
+
+		// For now scale to use whole atlas
+		Size2 cluster_atlas_size = light_storage->cluster_shadow_atlas_get_size(p_shadow_atlas);
+		float max_multiplier = MAX(light_camera_aabb.size.x, light_camera_aabb.size.y);
+		atlas_rect = Rect2i(Point2i(0, 0), cluster_atlas_size * Vector2(light_camera_aabb.size.x, light_camera_aabb.size.y) / max_multiplier);
+
+		Projection cm;
+		cm.set_orthogonal(-light_camera_aabb.size.x / 2.0, light_camera_aabb.size.x / 2.0, -light_camera_aabb.size.y / 2.0, light_camera_aabb.size.y / 2.0, 0.0, light_camera_aabb.size.z);
+		light_projection = cm;
+
+		//flip_y = true;
+
+	} else if (light_storage->light_get_type(base) == RS::LIGHT_DIRECTIONAL) {
 		//set pssm stuff
 		uint64_t last_scene_shadow_pass = light_storage->light_instance_get_shadow_pass(p_light);
 		if (last_scene_shadow_pass != get_scene_pass()) {
@@ -1704,6 +1773,14 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 			u.binding = 14;
 			u.append_id(RendererRD::MaterialStorage::get_singleton()->global_shader_uniforms_get_storage_buffer());
+			uniforms.push_back(u);
+		}
+		/* TODO: Verify this works for clustered too */
+		{
+			RD::Uniform u;
+			u.binding = 15;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.append_id(RendererRD::LightStorage::get_singleton()->get_cluster_shadow_buffer());
 			uniforms.push_back(u);
 		}
 

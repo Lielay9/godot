@@ -208,7 +208,7 @@ void RendererViewport::_draw_3d(Viewport *p_viewport) {
 	}
 
 	float screen_mesh_lod_threshold = p_viewport->mesh_lod_threshold / float(p_viewport->size.width);
-	RSG::scene->render_camera(p_viewport->render_buffers, p_viewport->camera, p_viewport->scenario, p_viewport->self, p_viewport->internal_size, p_viewport->use_taa, screen_mesh_lod_threshold, p_viewport->shadow_atlas, xr_interface, &p_viewport->render_info);
+	RSG::scene->render_camera(p_viewport->render_buffers, p_viewport->camera, p_viewport->scenario, p_viewport->self, p_viewport->internal_size, p_viewport->use_taa, screen_mesh_lod_threshold, p_viewport->cluster_shadow_atlas, p_viewport->shadow_atlas, xr_interface, &p_viewport->render_info);
 
 	RENDER_TIMESTAMP("< Render 3D Scene");
 }
@@ -497,7 +497,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 
 		if (scenario_draw_canvas_bg && canvas_map.begin() && canvas_map.begin()->key.get_layer() > scenario_canvas_max_layer) {
 			if (!can_draw_3d) {
-				RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->shadow_atlas);
+				RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->cluster_shadow_atlas, p_viewport->shadow_atlas);
 			} else {
 				_draw_3d(p_viewport);
 			}
@@ -537,7 +537,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 
 			if (scenario_draw_canvas_bg && E.key.get_layer() >= scenario_canvas_max_layer) {
 				if (!can_draw_3d) {
-					RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->shadow_atlas);
+					RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->cluster_shadow_atlas, p_viewport->shadow_atlas);
 				} else {
 					_draw_3d(p_viewport);
 				}
@@ -548,7 +548,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 
 		if (scenario_draw_canvas_bg) {
 			if (!can_draw_3d) {
-				RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->shadow_atlas);
+				RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->cluster_shadow_atlas, p_viewport->shadow_atlas);
 			} else {
 				// There may be an outstanding clear request if a clear was requested, but no 2D elements were drawn.
 				// Clear now otherwise we copy over garbage from the render target.
@@ -771,6 +771,8 @@ void RendererViewport::viewport_initialize(RID p_rid) {
 	viewport->self = p_rid;
 	viewport->render_target = RSG::texture_storage->render_target_create();
 	viewport->shadow_atlas = RSG::light_storage->shadow_atlas_create();
+	viewport->cluster_shadow_atlas = RSG::light_storage->cluster_shadow_atlas_create();
+	RSG::light_storage->cluster_shadow_atlas_set_size(viewport->cluster_shadow_atlas, 2048, 2048, true); // TODO: Remove and re-move.
 	viewport->viewport_render_direct_to_screen = false;
 
 	viewport->fsr_enabled = !RSG::rasterizer->is_low_end() && !viewport->disable_3d;
@@ -1305,6 +1307,7 @@ bool RendererViewport::free(RID p_rid) {
 
 		RSG::texture_storage->render_target_free(viewport->render_target);
 		RSG::light_storage->shadow_atlas_free(viewport->shadow_atlas);
+		RSG::light_storage->cluster_shadow_atlas_free(viewport->cluster_shadow_atlas);
 		if (viewport->render_buffers.is_valid()) {
 			viewport->render_buffers.unref();
 		}
