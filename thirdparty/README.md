@@ -17,10 +17,22 @@ Files extracted from upstream source:
 - `license.txt`
 
 
+## astcenc
+
+- Upstream: https://github.com/ARM-software/astc-encoder
+- Version: 4.3.0 (ec83dda79fcefe07f69cdae7ed980d169bf2c4d4, 2023)
+- License: Apache 2.0
+
+Files extracted from upstream source:
+
+- `astcenc_*` and `astcenc.h` files from `Source`
+- `LICENSE.txt`
+
+
 ## basis_universal
 
 - Upstream: https://github.com/BinomialLLC/basis_universal
-- Version: git (1531cfaf9ed5232248a0a45736686a849ca3befc, 2022)
+- Version: git (a91e94c8495d7f470d3df326a364d49324cfd4a3, 2022)
 - License: Apache 2.0
 
 Files extracted from upstream source:
@@ -57,6 +69,11 @@ Files extracted from upstream source:
 Files extracted from upstream source:
 
 - all .cpp, .h, and .txt files except the folders MakeTables and etc2packer.
+
+Changes related to BC6H packing and unpacking made upstream in
+https://github.com/elasota/cvtt/commit/2e4b6b2747aec11f4cc6dd09ef43fa8ce769f6e2
+have been removed as they caused massive quality regressions. Apply the patches
+in the `patches/` folder when syncing on newer upstream commits.
 
 
 ## doctest
@@ -164,6 +181,7 @@ Files extracted from upstream source:
 
 - `src/` folder, minus the `dlg` and `tools` subfolders
   * These files can be removed: `.dat`, `.diff`, `.mk`, `.rc`, `README*`
+  * In `src/gzip/`, remove zlib files (everything but `ftgzip.c` and `ftzconf.h`)
 - `include/` folder, minus the `dlg` subfolder
 - `LICENSE.TXT` and `docs/FTL.TXT`
 
@@ -217,8 +235,8 @@ Files extracted from upstream source:
 ## graphite
 
 - Upstream: https://github.com/silnrsi/graphite
-- Version: 1.3.14 (80c52493ef42e6fe605a69dcddd2a691cd8a1380, 2021)
-- License: MPL-2.0
+- Version: 1.3.14 (27572742003b93dc53dc02c01c237b72c6c25f54, 2022)
+- License: MIT
 
 Files extracted from upstream source:
 
@@ -230,7 +248,7 @@ Files extracted from upstream source:
 ## harfbuzz
 
 - Upstream: https://github.com/harfbuzz/harfbuzz
-- Version: 5.3.1 (970321db7bddbe8c579b73751fc655a924ea3ce6, 2022)
+- Version: 6.0.0 (afcae83a064843d71d47624bc162e121cc56c08b, 2022)
 - License: MIT
 
 Files extracted from upstream source:
@@ -333,7 +351,7 @@ Files extracted from upstream source:
 ## libwebp
 
 - Upstream: https://chromium.googlesource.com/webm/libwebp/
-- Version: 1.2.4 (0d1f12546bd803099a60c070517a552483f3790e, 2022)
+- Version: 1.3.0 (b557776962a3dcc985d83bd4ed94e1e2e50d0fa2, 2022)
 - License: BSD-3-Clause
 
 Files extracted from upstream source:
@@ -345,7 +363,7 @@ Files extracted from upstream source:
 ## mbedtls
 
 - Upstream: https://github.com/Mbed-TLS/mbedtls
-- Version: 2.18.1 (dd79db10014d85b26d11fe57218431f2e5ede6f2, 2022)
+- Version: 2.18.2 (89f040a5c938985c5f30728baed21e49d0846a53, 2022)
 - License: Apache 2.0
 
 File extracted from upstream release tarball:
@@ -355,17 +373,15 @@ File extracted from upstream release tarball:
 - The `LICENSE` file.
 - Applied the patch in `patches/1453.diff` (upstream PR:
   https://github.com/ARMmbed/mbedtls/pull/1453).
+  Applied the patch in `patches/windows-arm64-hardclock.diff`
 - Added 2 files `godot_core_mbedtls_platform.c` and `godot_core_mbedtls_config.h`
   providing configuration for light bundling with core.
-
-Some changes have been made in order to fix Windows on ARM build errors.
-They are marked with `// -- GODOT start --` and `// -- GODOT end --`
 
 
 ## meshoptimizer
 
 - Upstream: https://github.com/zeux/meshoptimizer
-- Version: git (ea4558d1c0f217f1d67ed7fe0b07896ece88ae18, 2022)
+- Version: git (4a287848fd664ae1c3fc8e5e008560534ceeb526, 2022)
 - License: MIT
 
 Files extracted from upstream repository:
@@ -416,12 +432,14 @@ that file when upgrading.
 ## minizip
 
 - Upstream: https://www.zlib.net
-- Version: 1.2.12 (zlib contrib, 2022)
+- Version: 1.2.13 (zlib contrib, 2022)
 - License: zlib
 
 Files extracted from the upstream source:
 
-- contrib/minizip/{crypt.h,ioapi.{c,h},unzip.{c,h},zip.{c,h}}
+- From `contrib/minizip`:
+  `{crypt.h,ioapi.{c,h},unzip.{c,h},zip.{c,h}}`
+  `MiniZip64_info.txt`
 
 Important: Some files have Godot-made changes for use in core/io.
 They are marked with `/* GODOT start */` and `/* GODOT end */`
@@ -548,7 +566,7 @@ Patch files are provided in `oidn/patches/`.
 ## openxr
 
 - Upstream: https://github.com/KhronosGroup/OpenXR-SDK
-- Version: 1.0.25 (c16a18c99740ea5dd251e3af117e0e5aea4ceaa9, 2022)
+- Version: 1.0.26 (e2da9ce83a4388c9622da328bf48548471261290, 2022)
 - License: Apache 2.0
 
 Files extracted from upstream source:
@@ -768,12 +786,13 @@ Files extracted from upstream source:
 ## zlib
 
 - Upstream: https://www.zlib.net
-- Version: 1.2.12 (2022)
+- Version: 1.2.13 (2022)
 - License: zlib
 
 Files extracted from upstream source:
 
-- all .c and .h files
+- All `*.c` and `*.h` files
+- `LICENSE`
 
 
 ## zstd

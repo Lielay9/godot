@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="Animation" inherits="Resource" version="4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="Animation" inherits="Resource" version="4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		Contains data used to animate everything in the engine.
 	</brief_description>
@@ -104,6 +104,13 @@
 				[param stream] is the [AudioStream] resource to play. [param start_offset] is the number of seconds cut off at the beginning of the audio stream, while [param end_offset] is at the ending.
 			</description>
 		</method>
+		<method name="audio_track_is_use_blend" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="track_idx" type="int" />
+			<description>
+				Returns [code]true[/code] if the track at [param track_idx] will be blended with other animations.
+			</description>
+		</method>
 		<method name="audio_track_set_key_end_offset">
 			<return type="void" />
 			<param index="0" name="track_idx" type="int" />
@@ -129,6 +136,14 @@
 			<param index="2" name="stream" type="Resource" />
 			<description>
 				Sets the stream of the key identified by [param key_idx] to value [param stream]. The [param track_idx] must be the index of an Audio Track.
+			</description>
+		</method>
+		<method name="audio_track_set_use_blend">
+			<return type="void" />
+			<param index="0" name="track_idx" type="int" />
+			<param index="1" name="enable" type="bool" />
+			<description>
+				Sets whether the track will be blended with other animations. If [code]true[/code], the audio playback volume changes depending on the blend value.
 			</description>
 		</method>
 		<method name="bezier_track_get_key_in_handle" qualifiers="const">
@@ -305,9 +320,9 @@
 			<return type="int" />
 			<param index="0" name="track_idx" type="int" />
 			<param index="1" name="time" type="float" />
-			<param index="2" name="exact" type="bool" default="false" />
+			<param index="2" name="find_mode" type="int" enum="Animation.FindMode" default="0" />
 			<description>
-				Finds the key index by time in a given track. Optionally, only find it if the exact time is given.
+				Finds the key index by time in a given track. Optionally, only find it if the approx/exact time is given.
 			</description>
 		</method>
 		<method name="track_get_interpolation_loop_wrap" qualifiers="const">
@@ -596,15 +611,12 @@
 			[b]Note:[/b] The result value is always normalized and may not match the key value.
 		</constant>
 		<constant name="UPDATE_CONTINUOUS" value="0" enum="UpdateMode">
-			Update between keyframes.
+			Update between keyframes and hold the value.
 		</constant>
 		<constant name="UPDATE_DISCRETE" value="1" enum="UpdateMode">
-			Update at the keyframes and hold the value.
-		</constant>
-		<constant name="UPDATE_TRIGGER" value="2" enum="UpdateMode">
 			Update at the keyframes.
 		</constant>
-		<constant name="UPDATE_CAPTURE" value="3" enum="UpdateMode">
+		<constant name="UPDATE_CAPTURE" value="2" enum="UpdateMode">
 			Same as linear interpolation, but also interpolates from the current value (i.e. dynamically at runtime) if the first key isn't at 0 seconds.
 		</constant>
 		<constant name="LOOP_NONE" value="0" enum="LoopMode">
@@ -624,6 +636,15 @@
 		</constant>
 		<constant name="LOOPED_FLAG_START" value="2" enum="LoopedFlag">
 			This flag indicates that the animation has reached the start of the animation and just after loop processed.
+		</constant>
+		<constant name="FIND_MODE_NEAREST" value="0" enum="FindMode">
+			Finds the nearest time key.
+		</constant>
+		<constant name="FIND_MODE_APPROX" value="1" enum="FindMode">
+			Finds only the key with approximating the time.
+		</constant>
+		<constant name="FIND_MODE_EXACT" value="2" enum="FindMode">
+			Finds only the key with matching the time.
 		</constant>
 	</constants>
 </class>

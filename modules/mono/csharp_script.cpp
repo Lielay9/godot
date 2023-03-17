@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  csharp_script.cpp                                                    */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  csharp_script.cpp                                                     */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "csharp_script.h"
 
@@ -42,7 +42,6 @@
 
 #ifdef TOOLS_ENABLED
 #include "core/os/keyboard.h"
-#include "editor/bindings_generator.h"
 #include "editor/editor_internal_calls.h"
 #include "editor/editor_node.h"
 #include "editor/editor_settings.h"
@@ -58,8 +57,10 @@
 #include "godotsharp_dirs.h"
 #include "managed_callable.h"
 #include "mono_gd/gd_mono_cache.h"
+#include "servers/text_server.h"
 #include "signal_awaiter_utils.h"
 #include "utils/macros.h"
+#include "utils/naming_utils.h"
 #include "utils/string_utils.h"
 
 #define CACHED_STRING_NAME(m_var) (CSharpLanguage::get_singleton()->get_string_names().m_var)
@@ -73,7 +74,7 @@ static bool _create_project_solution_if_needed() {
 
 CSharpLanguage *CSharpLanguage::singleton = nullptr;
 
-GDNativeInstanceBindingCallbacks CSharpLanguage::_instance_binding_callbacks = {
+GDExtensionInstanceBindingCallbacks CSharpLanguage::_instance_binding_callbacks = {
 	&_instance_binding_create_callback,
 	&_instance_binding_free_callback,
 	&_instance_binding_reference_callback
@@ -91,11 +92,6 @@ String CSharpLanguage::get_extension() const {
 	return "cs";
 }
 
-Error CSharpLanguage::execute_file(const String &p_path) {
-	// ??
-	return OK;
-}
-
 void CSharpLanguage::init() {
 #ifdef DEBUG_METHODS_ENABLED
 	if (OS::get_singleton()->get_cmdline_args().find("--class-db-json")) {
@@ -106,11 +102,9 @@ void CSharpLanguage::init() {
 	}
 #endif
 
-#if defined(TOOLS_ENABLED) && defined(DEBUG_METHODS_ENABLED)
-	// Generate the bindings here, before loading assemblies. The Godot assemblies
-	// may be missing if the glue wasn't generated yet in order to build them.
-	List<String> cmdline_args = OS::get_singleton()->get_cmdline_args();
-	BindingsGenerator::handle_cmdline_args(cmdline_args);
+	GLOBAL_DEF("dotnet/project/assembly_name", "");
+#ifdef TOOLS_ENABLED
+	GLOBAL_DEF("dotnet/project/solution_directory", "");
 #endif
 
 	gdmono = memnew(GDMono);
@@ -328,7 +322,7 @@ void CSharpLanguage::get_string_delimiters(List<String> *p_delimiters) const {
 }
 
 static String get_base_class_name(const String &p_base_class_name, const String p_class_name) {
-	String base_class = p_base_class_name;
+	String base_class = pascal_to_pascal_case(p_base_class_name);
 	if (p_class_name == base_class) {
 		base_class = "Godot." + base_class;
 	}
@@ -373,6 +367,10 @@ String CSharpLanguage::validate_path(const String &p_path) const {
 	if (keywords.find(class_name)) {
 		return RTR("Class name can't be a reserved keyword");
 	}
+	if (!TS->is_valid_identifier(class_name)) {
+		return RTR("Class name must be a valid identifier");
+	}
+
 	return "";
 }
 
@@ -389,17 +387,22 @@ bool CSharpLanguage::supports_builtin_mode() const {
 }
 
 #ifdef TOOLS_ENABLED
+struct VariantCsName {
+	Variant::Type variant_type;
+	const String cs_type;
+};
+
 static String variant_type_to_managed_name(const String &p_var_type_name) {
 	if (p_var_type_name.is_empty()) {
 		return "Variant";
 	}
 
 	if (ClassDB::class_exists(p_var_type_name)) {
-		return p_var_type_name;
+		return pascal_to_pascal_case(p_var_type_name);
 	}
 
 	if (p_var_type_name == Variant::get_type_name(Variant::OBJECT)) {
-		return "Godot.Object";
+		return "GodotObject";
 	}
 
 	if (p_var_type_name == Variant::get_type_name(Variant::INT)) {
@@ -451,37 +454,37 @@ static String variant_type_to_managed_name(const String &p_var_type_name) {
 	}
 
 	if (p_var_type_name == Variant::get_type_name(Variant::SIGNAL)) {
-		return "SignalInfo";
+		return "Signal";
 	}
 
-	Variant::Type var_types[] = {
-		Variant::BOOL,
-		Variant::INT,
-		Variant::VECTOR2,
-		Variant::VECTOR2I,
-		Variant::RECT2,
-		Variant::RECT2I,
-		Variant::VECTOR3,
-		Variant::VECTOR3I,
-		Variant::TRANSFORM2D,
-		Variant::VECTOR4,
-		Variant::VECTOR4I,
-		Variant::PLANE,
-		Variant::QUATERNION,
-		Variant::AABB,
-		Variant::BASIS,
-		Variant::TRANSFORM3D,
-		Variant::PROJECTION,
-		Variant::COLOR,
-		Variant::STRING_NAME,
-		Variant::NODE_PATH,
-		Variant::RID,
-		Variant::CALLABLE
+	const VariantCsName var_types[] = {
+		{ Variant::BOOL, "bool" },
+		{ Variant::INT, "long" },
+		{ Variant::VECTOR2, "Vector2" },
+		{ Variant::VECTOR2I, "Vector2I" },
+		{ Variant::RECT2, "Rect2" },
+		{ Variant::RECT2I, "Rect2I" },
+		{ Variant::VECTOR3, "Vector3" },
+		{ Variant::VECTOR3I, "Vector3I" },
+		{ Variant::TRANSFORM2D, "Transform2D" },
+		{ Variant::VECTOR4, "Vector4" },
+		{ Variant::VECTOR4I, "Vector4I" },
+		{ Variant::PLANE, "Plane" },
+		{ Variant::QUATERNION, "Quaternion" },
+		{ Variant::AABB, "Aabb" },
+		{ Variant::BASIS, "Basis" },
+		{ Variant::TRANSFORM3D, "Transform3D" },
+		{ Variant::PROJECTION, "Projection" },
+		{ Variant::COLOR, "Color" },
+		{ Variant::STRING_NAME, "StringName" },
+		{ Variant::NODE_PATH, "NodePath" },
+		{ Variant::RID, "Rid" },
+		{ Variant::CALLABLE, "Callable" },
 	};
 
-	for (unsigned int i = 0; i < sizeof(var_types) / sizeof(Variant::Type); i++) {
-		if (p_var_type_name == Variant::get_type_name(var_types[i])) {
-			return p_var_type_name;
+	for (unsigned int i = 0; i < sizeof(var_types) / sizeof(VariantCsName); i++) {
+		if (p_var_type_name == Variant::get_type_name(var_types[i].variant_type)) {
+			return var_types[i].cs_type;
 		}
 	}
 
@@ -583,7 +586,7 @@ Vector<ScriptLanguage::StackInfo> CSharpLanguage::debug_get_current_stack_info()
 		_recursion_flag_ = false;
 	};
 
-	if (!gdmono->is_runtime_initialized()) {
+	if (!gdmono || !gdmono->is_runtime_initialized()) {
 		return Vector<StackInfo>();
 	}
 
@@ -673,6 +676,7 @@ void CSharpLanguage::reload_tool_script(const Ref<Script> &p_script, bool p_soft
 
 #ifdef GD_MONO_HOT_RELOAD
 bool CSharpLanguage::is_assembly_reloading_needed() {
+	ERR_FAIL_NULL_V(gdmono, false);
 	if (!gdmono->is_runtime_initialized()) {
 		return false;
 	}
@@ -688,7 +692,7 @@ bool CSharpLanguage::is_assembly_reloading_needed() {
 			return false; // Already up to date
 		}
 	} else {
-		String assembly_name = ProjectSettings::get_singleton()->get_setting("dotnet/project/assembly_name");
+		String assembly_name = GLOBAL_GET("dotnet/project/assembly_name");
 
 		if (assembly_name.is_empty()) {
 			assembly_name = ProjectSettings::get_singleton()->get_safe_project_name();
@@ -707,6 +711,7 @@ bool CSharpLanguage::is_assembly_reloading_needed() {
 }
 
 void CSharpLanguage::reload_assemblies(bool p_soft_reload) {
+	ERR_FAIL_NULL(gdmono);
 	if (!gdmono->is_runtime_initialized()) {
 		return;
 	}
@@ -1136,6 +1141,7 @@ void CSharpLanguage::_editor_init_callback() {
 	// Add plugin to EditorNode and enable it
 	EditorNode::add_editor_plugin(godotsharp_editor);
 	ED_SHORTCUT("mono/build_solution", TTR("Build Solution"), KeyModifierMask::ALT | Key::B);
+	ED_SHORTCUT_OVERRIDE("mono/build_solution", "macos", KeyModifierMask::META | KeyModifierMask::CTRL | Key::B);
 	godotsharp_editor->enable_plugin();
 
 	get_singleton()->godotsharp_editor = godotsharp_editor;
@@ -1293,7 +1299,7 @@ void CSharpLanguage::_instance_binding_free_callback(void *, void *, void *p_bin
 	}
 }
 
-GDNativeBool CSharpLanguage::_instance_binding_reference_callback(void *p_token, void *p_binding, GDNativeBool p_reference) {
+GDExtensionBool CSharpLanguage::_instance_binding_reference_callback(void *p_token, void *p_binding, GDExtensionBool p_reference) {
 	CRASH_COND(!p_binding);
 
 	CSharpScriptBinding &script_binding = ((RBMap<Object *, CSharpScriptBinding>::Element *)p_binding)->get();
@@ -2202,7 +2208,7 @@ void CSharpScript::reload_registered_script(Ref<CSharpScript> p_script) {
 void CSharpScript::update_script_class_info(Ref<CSharpScript> p_script) {
 	bool tool = false;
 
-	// TODO: Use GDNative godot_dictionary
+	// TODO: Use GDExtension godot_dictionary
 	Array methods_array;
 	methods_array.~Array();
 	Dictionary rpc_functions_dict;
@@ -2292,7 +2298,7 @@ bool CSharpScript::can_instantiate() const {
 	// For tool scripts, this will never fire if the class is not found. That's because we
 	// don't know if it's a tool script if we can't find the class to access the attributes.
 	if (extra_cond && !valid) {
-		ERR_FAIL_V_MSG(false, "Cannot instance script because the associated class could not be found. Script: '" + get_path() + "'.");
+		ERR_FAIL_V_MSG(false, "Cannot instance script because the associated class could not be found. Script: '" + get_path() + "'. Make sure the script exists and contains a class definition with a name that matches the filename of the script exactly (it's case-sensitive).");
 	}
 
 	return valid && extra_cond;
@@ -2599,6 +2605,10 @@ bool CSharpScript::inherits_script(const Ref<Script> &p_script) const {
 
 Ref<Script> CSharpScript::get_base_script() const {
 	return base_script;
+}
+
+StringName CSharpScript::get_global_name() const {
+	return StringName();
 }
 
 void CSharpScript::get_script_property_list(List<PropertyInfo> *r_list) const {

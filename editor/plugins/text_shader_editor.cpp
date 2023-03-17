@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  text_shader_editor.cpp                                               */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  text_shader_editor.cpp                                                */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "text_shader_editor.h"
 
@@ -301,7 +301,9 @@ void ShaderTextEditor::_load_theme_settings() {
 	syntax_highlighter->clear_color_regions();
 	syntax_highlighter->add_color_region("/*", "*/", comment_color, false);
 	syntax_highlighter->add_color_region("//", "", comment_color, true);
-	syntax_highlighter->set_disabled_branch_color(comment_color);
+
+	// Disabled preprocessor branches use translucent text color to be easier to distinguish from comments.
+	syntax_highlighter->set_disabled_branch_color(Color(EDITOR_GET("text_editor/theme/highlighting/text_color")) * Color(1, 1, 1, 0.5));
 
 	te->clear_comment_delimiters();
 	te->add_comment_delimiter("/*", "*/", false);
@@ -381,11 +383,12 @@ void ShaderTextEditor::_code_complete_script(const String &p_code, List<ScriptLa
 	List<ScriptLanguage::CodeCompletionOption> pp_defines;
 	ShaderPreprocessor preprocessor;
 	String code;
-	complete_from_path = (shader.is_valid() ? shader->get_path() : shader_inc->get_path()).get_base_dir();
+	String resource_path = (shader.is_valid() ? shader->get_path() : shader_inc->get_path());
+	complete_from_path = resource_path.get_base_dir();
 	if (!complete_from_path.ends_with("/")) {
 		complete_from_path += "/";
 	}
-	preprocessor.preprocess(p_code, "", code, nullptr, nullptr, nullptr, nullptr, &pp_options, &pp_defines, _complete_include_paths);
+	preprocessor.preprocess(p_code, resource_path, code, nullptr, nullptr, nullptr, nullptr, &pp_options, &pp_defines, _complete_include_paths);
 	complete_from_path = String();
 	if (pp_options.size()) {
 		for (const ScriptLanguage::CodeCompletionOption &E : pp_options) {
@@ -727,6 +730,8 @@ void TextShaderEditor::_editor_settings_changed() {
 	shader_editor->get_text_editor()->add_theme_constant_override("line_spacing", EDITOR_GET("text_editor/appearance/whitespace/line_spacing"));
 	shader_editor->get_text_editor()->set_draw_breakpoints_gutter(false);
 	shader_editor->get_text_editor()->set_draw_executing_lines_gutter(false);
+
+	trim_trailing_whitespace_on_save = EDITOR_GET("text_editor/behavior/files/trim_trailing_whitespace_on_save");
 }
 
 void TextShaderEditor::_show_warnings_panel(bool p_show) {
@@ -887,6 +892,10 @@ void TextShaderEditor::save_external_data(const String &p_str) {
 		return;
 	}
 
+	if (trim_trailing_whitespace_on_save) {
+		trim_trailing_whitespace();
+	}
+
 	apply_shaders();
 
 	Ref<Shader> edited_shader = shader_editor->get_edited_shader();
@@ -907,6 +916,10 @@ void TextShaderEditor::save_external_data(const String &p_str) {
 	shader_editor->get_text_editor()->tag_saved_version();
 
 	disk_changed->hide();
+}
+
+void TextShaderEditor::trim_trailing_whitespace() {
+	shader_editor->trim_trailing_whitespace();
 }
 
 void TextShaderEditor::validate_script() {
@@ -1166,6 +1179,7 @@ TextShaderEditor::TextShaderEditor() {
 	warnings_panel->set_h_size_flags(SIZE_EXPAND_FILL);
 	warnings_panel->set_meta_underline(true);
 	warnings_panel->set_selection_enabled(true);
+	warnings_panel->set_context_menu_enabled(true);
 	warnings_panel->set_focus_mode(FOCUS_CLICK);
 	warnings_panel->hide();
 	warnings_panel->connect("meta_clicked", callable_mp(this, &TextShaderEditor::_warning_clicked));
@@ -1189,6 +1203,8 @@ TextShaderEditor::TextShaderEditor() {
 
 	disk_changed->add_button(TTR("Resave"), !DisplayServer::get_singleton()->get_swap_cancel_ok(), "resave");
 	disk_changed->connect("custom_action", callable_mp(this, &TextShaderEditor::save_external_data));
+
+	trim_trailing_whitespace_on_save = EDITOR_GET("text_editor/behavior/files/trim_trailing_whitespace_on_save");
 
 	add_child(disk_changed);
 

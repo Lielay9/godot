@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="Vector4" version="4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="Vector4" version="4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		Vector used for 4D math using floating point coordinates.
 	</brief_description>
 	<description>
 		4-element structure that can be used to represent any quadruplet of numeric values.
-		It uses floating-point coordinates. By default, these floating-point values use 32-bit precision, unlike [float] which is always 64-bit. If double precision is needed, compile the engine with the option [code]float=64[/code].
+		It uses floating-point coordinates. By default, these floating-point values use 32-bit precision, unlike [float] which is always 64-bit. If double precision is needed, compile the engine with the option [code]precision=double[/code].
 		See [Vector4i] for its integer counterpart.
 		[b]Note:[/b] In a boolean context, a Vector4 will evaluate to [code]false[/code] if it's equal to [code]Vector4(0, 0, 0, 0)[/code]. Otherwise, a Vector4 will always evaluate to [code]true[/code].
 	</description>
@@ -190,7 +190,8 @@
 		<method name="normalized" qualifiers="const">
 			<return type="Vector4" />
 			<description>
-				Returns the result of scaling the vector to unit length. Equivalent to [code]v / v.length()[/code].
+				Returns the result of scaling the vector to unit length. Equivalent to [code]v / v.length()[/code]. See also [method is_normalized].
+				[b]Note:[/b] This function may return incorrect values if the input vector length is near zero.
 			</description>
 		</method>
 		<method name="posmod" qualifiers="const">

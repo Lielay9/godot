@@ -1,38 +1,39 @@
-/*************************************************************************/
-/*  code_editor.cpp                                                      */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  code_editor.cpp                                                       */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "code_editor.h"
 
 #include "core/input/input.h"
 #include "core/os/keyboard.h"
 #include "core/string/string_builder.h"
+#include "core/templates/pair.h"
 #include "editor/editor_scale.h"
 #include "editor/editor_settings.h"
 #include "editor/plugins/script_editor_plugin.h"
@@ -142,6 +143,9 @@ void FindReplaceBar::unhandled_input(const Ref<InputEvent> &p_event) {
 }
 
 bool FindReplaceBar::_search(uint32_t p_flags, int p_from_line, int p_from_col) {
+	if (!preserve_cursor) {
+		text_editor->remove_secondary_carets();
+	}
 	String text = get_search_text();
 	Point2i pos = text_editor->search(text, p_flags, p_from_line, p_from_col);
 
@@ -177,6 +181,7 @@ bool FindReplaceBar::_search(uint32_t p_flags, int p_from_line, int p_from_col) 
 }
 
 void FindReplaceBar::_replace() {
+	text_editor->remove_secondary_carets();
 	bool selection_enabled = text_editor->has_selection(0);
 	Point2i selection_begin, selection_end;
 	if (selection_enabled) {
@@ -224,6 +229,7 @@ void FindReplaceBar::_replace() {
 }
 
 void FindReplaceBar::_replace_all() {
+	text_editor->remove_secondary_carets();
 	text_editor->disconnect("text_changed", callable_mp(this, &FindReplaceBar::_editor_text_changed));
 	// Line as x so it gets priority in comparison, column as y.
 	Point2i orig_cursor(text_editor->get_caret_line(0), text_editor->get_caret_column(0));
@@ -664,7 +670,6 @@ void FindReplaceBar::set_text_edit(CodeTextEditor *p_text_editor) {
 void FindReplaceBar::_bind_methods() {
 	ClassDB::bind_method("_search_current", &FindReplaceBar::search_current);
 
-	ADD_SIGNAL(MethodInfo("search"));
 	ADD_SIGNAL(MethodInfo("error"));
 }
 
@@ -872,6 +877,10 @@ void CodeTextEditor::_reset_zoom() {
 }
 
 void CodeTextEditor::_line_col_changed() {
+	if (!code_complete_timer->is_stopped() && code_complete_timer_line != text_editor->get_caret_line()) {
+		code_complete_timer->stop();
+	}
+
 	String line = text_editor->get_line(text_editor->get_caret_line());
 
 	int positional_column = 0;
@@ -901,6 +910,7 @@ void CodeTextEditor::_line_col_changed() {
 
 void CodeTextEditor::_text_changed() {
 	if (text_editor->is_insert_text_operation()) {
+		code_complete_timer_line = text_editor->get_caret_line();
 		code_complete_timer->start();
 	}
 
@@ -1290,90 +1300,93 @@ void CodeTextEditor::convert_case(CaseStyle p_case) {
 void CodeTextEditor::move_lines_up() {
 	text_editor->begin_complex_operation();
 
-	Vector<int> carets_to_remove;
-
 	Vector<int> caret_edit_order = text_editor->get_caret_index_edit_order();
+
+	// Lists of carets representing each group
+	Vector<Vector<int>> caret_groups;
+	Vector<Pair<int, int>> group_borders;
+
+	// Search for groups of carets and their selections residing on the same lines
 	for (int i = 0; i < caret_edit_order.size(); i++) {
 		int c = caret_edit_order[i];
-		int cl = text_editor->get_caret_line(c);
 
-		bool swaped_caret = false;
-		for (int j = i + 1; j < caret_edit_order.size(); j++) {
-			if (text_editor->has_selection(caret_edit_order[j])) {
-				if (text_editor->get_selection_from_line() == cl) {
-					carets_to_remove.push_back(caret_edit_order[j]);
-					continue;
-				}
+		Vector<int> new_group{ c };
+		Pair<int, int> group_border;
+		group_border.first = _get_affected_lines_from(c);
+		group_border.second = _get_affected_lines_to(c);
 
-				if (text_editor->get_selection_to_line() == cl) {
-					if (text_editor->has_selection(c)) {
-						if (text_editor->get_selection_to_line(c) != cl) {
-							text_editor->select(cl + 1, 0, text_editor->get_selection_to_line(c), text_editor->get_selection_to_column(c), c);
-							break;
-						}
-					}
+		for (int j = i; j < caret_edit_order.size() - 1; j++) {
+			int c_current = caret_edit_order[j];
+			int c_next = caret_edit_order[j + 1];
 
-					carets_to_remove.push_back(c);
-					i = j - 1;
-					swaped_caret = true;
-					break;
-				}
+			int next_start_pos = _get_affected_lines_from(c_next);
+			int next_end_pos = _get_affected_lines_to(c_next);
+
+			int current_start_pos = text_editor->has_selection(c_current) ? text_editor->get_selection_from_line(c_current) : text_editor->get_caret_line(c_current);
+
+			i = j;
+			if (next_end_pos != current_start_pos && next_end_pos + 1 != current_start_pos) {
 				break;
 			}
-
-			if (text_editor->get_caret_line(caret_edit_order[j]) == cl) {
-				carets_to_remove.push_back(caret_edit_order[j]);
-				i = j;
-				continue;
+			group_border.first = next_start_pos;
+			new_group.push_back(c_next);
+			// If the last caret is added to the current group there is no need to process it again
+			if (j + 1 == caret_edit_order.size() - 1) {
+				i++;
 			}
-			break;
 		}
+		group_borders.push_back(group_border);
+		caret_groups.push_back(new_group);
+	}
 
-		if (swaped_caret) {
+	for (int i = group_borders.size() - 1; i >= 0; i--) {
+		if (group_borders[i].first - 1 < 0) {
 			continue;
 		}
 
-		if (text_editor->has_selection(c)) {
+		// If the group starts overlapping with the upper group don't move it
+		if (i < group_borders.size() - 1 && group_borders[i].first - 1 <= group_borders[i + 1].second) {
+			continue;
+		}
+
+		// We have to remember caret positions and selections prior to line swapping
+		Vector<Vector<int>> caret_group_parameters;
+
+		for (int j = 0; j < caret_groups[i].size(); j++) {
+			int c = caret_groups[i][j];
+			int cursor_line = text_editor->get_caret_line(c);
+			int cursor_column = text_editor->get_caret_column(c);
+
+			if (!text_editor->has_selection(c)) {
+				caret_group_parameters.push_back(Vector<int>{ -1, -1, -1, -1, cursor_line, cursor_column });
+				continue;
+			}
 			int from_line = text_editor->get_selection_from_line(c);
 			int from_col = text_editor->get_selection_from_column(c);
 			int to_line = text_editor->get_selection_to_line(c);
 			int to_column = text_editor->get_selection_to_column(c);
-			int cursor_line = text_editor->get_caret_line(c);
+			caret_group_parameters.push_back(Vector<int>{ from_line, from_col, to_line, to_column, cursor_line, cursor_column });
+		}
 
-			for (int j = from_line; j <= to_line; j++) {
-				int line_id = j;
-				int next_id = j - 1;
-
-				if (line_id == 0 || next_id < 0) {
-					return;
-				}
-
-				text_editor->unfold_line(line_id);
-				text_editor->unfold_line(next_id);
-
-				text_editor->swap_lines(line_id, next_id);
-				text_editor->set_caret_line(next_id, c == 0, true, 0, c);
-			}
-			int from_line_up = from_line > 0 ? from_line - 1 : from_line;
-			int to_line_up = to_line > 0 ? to_line - 1 : to_line;
-			int cursor_line_up = cursor_line > 0 ? cursor_line - 1 : cursor_line;
-			text_editor->select(from_line_up, from_col, to_line_up, to_column, c);
-			text_editor->set_caret_line(cursor_line_up, c == 0, true, 0, c);
-		} else {
-			int line_id = text_editor->get_caret_line(c);
-			int next_id = line_id - 1;
-
-			if (line_id == 0 || next_id < 0) {
-				return;
-			}
-
+		for (int line_id = group_borders[i].first; line_id <= group_borders[i].second; line_id++) {
 			text_editor->unfold_line(line_id);
-			text_editor->unfold_line(next_id);
+			text_editor->unfold_line(line_id - 1);
 
-			text_editor->swap_lines(line_id, next_id);
-			text_editor->set_caret_line(next_id, c == 0, true, 0, c);
+			text_editor->swap_lines(line_id - 1, line_id);
+		}
+
+		for (int j = 0; j < caret_groups[i].size(); j++) {
+			int c = caret_groups[i][j];
+			Vector<int> caret_parameters = caret_group_parameters[j];
+			text_editor->set_caret_line(caret_parameters[4] - 1, c == 0, true, 0, c);
+			text_editor->set_caret_column(caret_parameters[5], c == 0, c);
+
+			if (caret_parameters[0] >= 0) {
+				text_editor->select(caret_parameters[0] - 1, caret_parameters[1], caret_parameters[2] - 1, caret_parameters[3], c);
+			}
 		}
 	}
+
 	text_editor->end_complex_operation();
 	text_editor->merge_overlapping_carets();
 	text_editor->queue_redraw();
@@ -1382,95 +1395,93 @@ void CodeTextEditor::move_lines_up() {
 void CodeTextEditor::move_lines_down() {
 	text_editor->begin_complex_operation();
 
-	Vector<int> carets_to_remove;
-
 	Vector<int> caret_edit_order = text_editor->get_caret_index_edit_order();
+
+	// Lists of carets representing each group
+	Vector<Vector<int>> caret_groups;
+	Vector<Pair<int, int>> group_borders;
+	Vector<int> group_border_ends;
+	// Search for groups of carets and their selections residing on the same lines
 	for (int i = 0; i < caret_edit_order.size(); i++) {
 		int c = caret_edit_order[i];
-		int cl = text_editor->get_caret_line(c);
 
-		bool swaped_caret = false;
-		for (int j = i + 1; j < caret_edit_order.size(); j++) {
-			if (text_editor->has_selection(caret_edit_order[j])) {
-				if (text_editor->get_selection_from_line() == cl) {
-					carets_to_remove.push_back(caret_edit_order[j]);
-					continue;
+		Vector<int> new_group{ c };
+		Pair<int, int> group_border;
+		group_border.first = _get_affected_lines_from(c);
+		group_border.second = _get_affected_lines_to(c);
+
+		for (int j = i; j < caret_edit_order.size() - 1; j++) {
+			int c_current = caret_edit_order[j];
+			int c_next = caret_edit_order[j + 1];
+
+			int next_start_pos = _get_affected_lines_from(c_next);
+			int next_end_pos = _get_affected_lines_to(c_next);
+
+			int current_start_pos = text_editor->has_selection(c_current) ? text_editor->get_selection_from_line(c_current) : text_editor->get_caret_line(c_current);
+
+			i = j;
+			if (next_end_pos == current_start_pos || next_end_pos + 1 == current_start_pos) {
+				group_border.first = next_start_pos;
+				new_group.push_back(c_next);
+				// If the last caret is added to the current group there is no need to process it again
+				if (j + 1 == caret_edit_order.size() - 1) {
+					i++;
 				}
-
-				if (text_editor->get_selection_to_line() == cl) {
-					if (text_editor->has_selection(c)) {
-						if (text_editor->get_selection_to_line(c) != cl) {
-							text_editor->select(cl + 1, 0, text_editor->get_selection_to_line(c), text_editor->get_selection_to_column(c), c);
-							break;
-						}
-					}
-
-					carets_to_remove.push_back(c);
-					i = j - 1;
-					swaped_caret = true;
-					break;
-				}
+			} else {
 				break;
 			}
-
-			if (text_editor->get_caret_line(caret_edit_order[j]) == cl) {
-				carets_to_remove.push_back(caret_edit_order[j]);
-				i = j;
-				continue;
-			}
-			break;
 		}
+		group_borders.push_back(group_border);
+		group_border_ends.push_back(text_editor->has_selection(c) ? text_editor->get_selection_to_line(c) : text_editor->get_caret_line(c));
+		caret_groups.push_back(new_group);
+	}
 
-		if (swaped_caret) {
+	for (int i = 0; i < group_borders.size(); i++) {
+		if (group_border_ends[i] + 1 > text_editor->get_line_count() - 1) {
 			continue;
 		}
 
-		if (text_editor->has_selection(c)) {
-			int from_line = text_editor->get_selection_from_line(c);
-			int from_col = text_editor->get_selection_from_column(c);
-			int to_line = text_editor->get_selection_to_line(c);
-			int to_column = text_editor->get_selection_to_column(c);
-			int cursor_line = text_editor->get_caret_line(c);
-
-			for (int l = to_line; l >= from_line; l--) {
-				int line_id = l;
-				int next_id = l + 1;
-
-				if (line_id == text_editor->get_line_count() - 1 || next_id > text_editor->get_line_count()) {
-					continue;
-				}
-
-				text_editor->unfold_line(line_id);
-				text_editor->unfold_line(next_id);
-
-				text_editor->swap_lines(line_id, next_id);
-				text_editor->set_caret_line(next_id, c == 0, true, 0, c);
-			}
-			int from_line_down = from_line < text_editor->get_line_count() ? from_line + 1 : from_line;
-			int to_line_down = to_line < text_editor->get_line_count() ? to_line + 1 : to_line;
-			int cursor_line_down = cursor_line < text_editor->get_line_count() ? cursor_line + 1 : cursor_line;
-			text_editor->select(from_line_down, from_col, to_line_down, to_column, c);
-			text_editor->set_caret_line(cursor_line_down, c == 0, true, 0, c);
-		} else {
-			int line_id = text_editor->get_caret_line(c);
-			int next_id = line_id + 1;
-
-			if (line_id == text_editor->get_line_count() - 1 || next_id > text_editor->get_line_count()) {
-				continue;
-			}
-
-			text_editor->unfold_line(line_id);
-			text_editor->unfold_line(next_id);
-
-			text_editor->swap_lines(line_id, next_id);
-			text_editor->set_caret_line(next_id, c == 0, true, 0, c);
+		// If the group starts overlapping with the upper group don't move it
+		if (i > 0 && group_border_ends[i] + 1 >= group_borders[i - 1].first) {
+			continue;
 		}
-	}
 
-	// Sort and remove backwards to preserve indexes.
-	carets_to_remove.sort();
-	for (int i = carets_to_remove.size() - 1; i >= 0; i--) {
-		text_editor->remove_caret(carets_to_remove[i]);
+		// We have to remember caret positions and selections prior to line swapping
+		Vector<Vector<int>> caret_group_parameters;
+
+		for (int j = 0; j < caret_groups[i].size(); j++) {
+			int c = caret_groups[i][j];
+			int cursor_line = text_editor->get_caret_line(c);
+			int cursor_column = text_editor->get_caret_column(c);
+
+			if (text_editor->has_selection(c)) {
+				int from_line = text_editor->get_selection_from_line(c);
+				int from_col = text_editor->get_selection_from_column(c);
+				int to_line = text_editor->get_selection_to_line(c);
+				int to_column = text_editor->get_selection_to_column(c);
+				caret_group_parameters.push_back(Vector<int>{ from_line, from_col, to_line, to_column, cursor_line, cursor_column });
+			} else {
+				caret_group_parameters.push_back(Vector<int>{ -1, -1, -1, -1, cursor_line, cursor_column });
+			}
+		}
+
+		for (int line_id = group_borders[i].second; line_id >= group_borders[i].first; line_id--) {
+			text_editor->unfold_line(line_id);
+			text_editor->unfold_line(line_id + 1);
+
+			text_editor->swap_lines(line_id + 1, line_id);
+		}
+
+		for (int j = 0; j < caret_groups[i].size(); j++) {
+			int c = caret_groups[i][j];
+			Vector<int> caret_parameters = caret_group_parameters[j];
+			text_editor->set_caret_line(caret_parameters[4] + 1, c == 0, true, 0, c);
+			text_editor->set_caret_column(caret_parameters[5], c == 0, c);
+
+			if (caret_parameters[0] >= 0) {
+				text_editor->select(caret_parameters[0] + 1, caret_parameters[1], caret_parameters[2] + 1, caret_parameters[3], c);
+			}
+		}
 	}
 
 	text_editor->merge_overlapping_carets();
@@ -1478,86 +1489,43 @@ void CodeTextEditor::move_lines_down() {
 	text_editor->queue_redraw();
 }
 
-void CodeTextEditor::_delete_line(int p_line, int p_caret) {
-	// this is currently intended to be called within delete_lines()
-	// so `begin_complex_operation` is omitted here
-	text_editor->set_line(p_line, "");
-	if (p_line == 0 && text_editor->get_line_count() > 1) {
-		text_editor->set_caret_line(1, p_caret == 0, true, 0, p_caret);
-		text_editor->set_caret_column(0, p_caret == 0, p_caret);
-	}
-	text_editor->backspace(p_caret);
-	if (p_line < text_editor->get_line_count()) {
-		text_editor->unfold_line(p_line);
-	}
-	text_editor->set_caret_line(p_line, p_caret == 0, true, 0, p_caret);
-}
-
 void CodeTextEditor::delete_lines() {
 	text_editor->begin_complex_operation();
 
-	Vector<int> carets_to_remove;
-
 	Vector<int> caret_edit_order = text_editor->get_caret_index_edit_order();
-	for (int i = 0; i < caret_edit_order.size(); i++) {
-		int c = caret_edit_order[i];
-		int cl = text_editor->get_caret_line(c);
-
-		bool swaped_caret = false;
-		for (int j = i + 1; j < caret_edit_order.size(); j++) {
-			if (text_editor->has_selection(caret_edit_order[j])) {
-				if (text_editor->get_selection_from_line() == cl) {
-					carets_to_remove.push_back(caret_edit_order[j]);
-					continue;
-				}
-
-				if (text_editor->get_selection_to_line() == cl) {
-					if (text_editor->has_selection(c)) {
-						if (text_editor->get_selection_to_line(c) != cl) {
-							text_editor->select(cl + 1, 0, text_editor->get_selection_to_line(c), text_editor->get_selection_to_column(c), c);
-							break;
-						}
-					}
-
-					carets_to_remove.push_back(c);
-					i = j - 1;
-					swaped_caret = true;
-					break;
-				}
-				break;
+	Vector<int> lines;
+	int last_line = INT_MAX;
+	for (const int &c : caret_edit_order) {
+		for (int line = _get_affected_lines_to(c); line >= _get_affected_lines_from(c); line--) {
+			if (line >= last_line) {
+				continue;
 			}
+			last_line = line;
+			lines.append(line);
+		}
+	}
 
-			if (text_editor->get_caret_line(caret_edit_order[j]) == cl) {
-				carets_to_remove.push_back(caret_edit_order[j]);
-				i = j;
+	for (const int &line : lines) {
+		if (line != text_editor->get_line_count() - 1) {
+			text_editor->remove_text(line, 0, line + 1, 0);
+		} else {
+			text_editor->remove_text(line - 1, text_editor->get_line(line - 1).length(), line, text_editor->get_line(line).length());
+		}
+		// Readjust carets.
+		int new_line = MIN(line, text_editor->get_line_count() - 1);
+		text_editor->unfold_line(new_line);
+		for (const int &c : caret_edit_order) {
+			if (text_editor->get_caret_line(c) == line || (text_editor->get_caret_line(c) == line + 1 && text_editor->get_caret_column(c) == 0)) {
+				text_editor->deselect(c);
+				text_editor->set_caret_line(new_line, c == 0, true, 0, c);
+				continue;
+			}
+			if (text_editor->get_caret_line(c) > line) {
+				text_editor->set_caret_line(text_editor->get_caret_line(c) - 1, c == 0, true, 0, c);
 				continue;
 			}
 			break;
 		}
-
-		if (swaped_caret) {
-			continue;
-		}
-
-		if (text_editor->has_selection(c)) {
-			int to_line = text_editor->get_selection_to_line(c);
-			int from_line = text_editor->get_selection_from_line(c);
-			int count = Math::abs(to_line - from_line) + 1;
-
-			text_editor->set_caret_line(from_line, false, true, 0, c);
-			text_editor->deselect(c);
-			for (int j = 0; j < count; j++) {
-				_delete_line(from_line, c);
-			}
-		} else {
-			_delete_line(text_editor->get_caret_line(c), c);
-		}
-	}
-
-	// Sort and remove backwards to preserve indexes.
-	carets_to_remove.sort();
-	for (int i = carets_to_remove.size() - 1; i >= 0; i--) {
-		text_editor->remove_caret(carets_to_remove[i]);
 	}
 	text_editor->merge_overlapping_carets();
 	text_editor->end_complex_operation();
@@ -1614,77 +1582,68 @@ void CodeTextEditor::toggle_inline_comment(const String &delimiter) {
 	text_editor->begin_complex_operation();
 
 	Vector<int> caret_edit_order = text_editor->get_caret_index_edit_order();
-	for (const int &c : caret_edit_order) {
-		if (text_editor->has_selection(c)) {
-			int begin = text_editor->get_selection_from_line(c);
-			int end = text_editor->get_selection_to_line(c);
-
-			// End of selection ends on the first column of the last line, ignore it.
-			if (text_editor->get_selection_to_column(c) == 0) {
-				end -= 1;
+	caret_edit_order.reverse();
+	int last_line = -1;
+	for (const int &c1 : caret_edit_order) {
+		int from = _get_affected_lines_from(c1);
+		from += from == last_line ? 1 : 0;
+		int to = _get_affected_lines_to(c1);
+		last_line = to;
+		// Check first if there's any uncommented lines in selection.
+		bool is_commented = true;
+		for (int line = from; line <= to; line++) {
+			if (!text_editor->get_line(line).begins_with(delimiter)) {
+				is_commented = false;
+				break;
 			}
+		}
 
-			int col_to = text_editor->get_selection_to_column(c);
-			int cursor_pos = text_editor->get_caret_column(c);
-
-			// Check if all lines in the selected block are commented.
-			bool is_commented = true;
-			for (int i = begin; i <= end; i++) {
-				if (!text_editor->get_line(i).begins_with(delimiter)) {
-					is_commented = false;
-					break;
-				}
+		// Caret positions need to be saved since they could be moved at the eol.
+		Vector<int> caret_cols;
+		Vector<int> selection_to_cols;
+		for (const int &c2 : caret_edit_order) {
+			if (text_editor->get_caret_line(c2) >= from && text_editor->get_caret_line(c2) <= to) {
+				caret_cols.append(text_editor->get_caret_column(c2));
 			}
-			for (int i = begin; i <= end; i++) {
-				String line_text = text_editor->get_line(i);
-
-				if (line_text.strip_edges().is_empty()) {
-					line_text = delimiter;
-				} else {
-					if (is_commented) {
-						line_text = line_text.substr(delimiter.length(), line_text.length());
-					} else {
-						line_text = delimiter + line_text;
-					}
-				}
-				text_editor->set_line(i, line_text);
+			if (text_editor->has_selection(c2) && text_editor->get_selection_to_line(c2) >= from && text_editor->get_selection_to_line(c2) <= to) {
+				selection_to_cols.append(text_editor->get_selection_to_column(c2));
 			}
+		}
 
-			// Adjust selection & cursor position.
-			int offset = (is_commented ? -1 : 1) * delimiter.length();
-			int col_from = text_editor->get_selection_from_column(c) > 0 ? text_editor->get_selection_from_column(c) + offset : 0;
-
-			if (is_commented && text_editor->get_caret_column(c) == text_editor->get_line(text_editor->get_caret_line(c)).length() + 1) {
-				cursor_pos += 1;
+		// Comment/uncomment.
+		for (int line = from; line <= to; line++) {
+			String line_text = text_editor->get_line(line);
+			if (line_text.strip_edges().is_empty()) {
+				text_editor->set_line(line, delimiter);
+				continue;
 			}
-
-			if (text_editor->get_selection_to_column(c) != 0 && col_to != text_editor->get_line(text_editor->get_selection_to_line(c)).length() + 1) {
-				col_to += offset;
+			if (is_commented) {
+				text_editor->set_line(line, line_text.substr(delimiter.length(), line_text.length()));
+				continue;
 			}
+			text_editor->set_line(line, delimiter + line_text);
+		}
 
-			if (text_editor->get_caret_column(c) != 0) {
-				cursor_pos += offset;
+		// Readjust carets and selections.
+		int caret_i = 0;
+		int selection_i = 0;
+		int offset = (is_commented ? -1 : 1) * delimiter.length();
+		for (const int &c2 : caret_edit_order) {
+			bool is_line_selection = text_editor->has_selection(c2) && text_editor->get_selection_from_line(c2) < text_editor->get_selection_to_line(c2);
+			if (text_editor->get_caret_line(c2) >= from && text_editor->get_caret_line(c2) <= to) {
+				int caret_col = caret_cols[caret_i++];
+				caret_col += (is_line_selection && caret_col == 0) ? 0 : offset;
+				text_editor->set_caret_column(caret_col, c2 == 0, c2);
 			}
-
-			text_editor->select(begin, col_from, text_editor->get_selection_to_line(c), col_to, c);
-			text_editor->set_caret_column(cursor_pos, c == 0, c);
-
-		} else {
-			int begin = text_editor->get_caret_line(c);
-			String line_text = text_editor->get_line(begin);
-			int delimiter_length = delimiter.length();
-
-			int col = text_editor->get_caret_column(c);
-			if (line_text.begins_with(delimiter)) {
-				line_text = line_text.substr(delimiter_length, line_text.length());
-				col -= delimiter_length;
-			} else {
-				line_text = delimiter + line_text;
-				col += delimiter_length;
+			if (text_editor->has_selection(c2) && text_editor->get_selection_to_line(c2) >= from && text_editor->get_selection_to_line(c2) <= to) {
+				int from_col = text_editor->get_selection_from_column(c2);
+				from_col += (is_line_selection && from_col == 0) ? 0 : offset;
+				int to_col = selection_to_cols[selection_i++];
+				to_col += (to_col == 0) ? 0 : offset;
+				text_editor->select(
+						text_editor->get_selection_from_line(c2), from_col,
+						text_editor->get_selection_to_line(c2), to_col, c2);
 			}
-
-			text_editor->set_line(begin, line_text);
-			text_editor->set_caret_column(col, c == 0, c);
 		}
 	}
 	text_editor->merge_overlapping_carets();
@@ -1922,6 +1881,22 @@ void CodeTextEditor::_toggle_scripts_pressed() {
 	update_toggle_scripts_button();
 }
 
+int CodeTextEditor::_get_affected_lines_from(int p_caret) {
+	return text_editor->has_selection(p_caret) ? text_editor->get_selection_from_line(p_caret) : text_editor->get_caret_line(p_caret);
+}
+
+int CodeTextEditor::_get_affected_lines_to(int p_caret) {
+	if (!text_editor->has_selection(p_caret)) {
+		return text_editor->get_caret_line(p_caret);
+	}
+	int line = text_editor->get_selection_to_line(p_caret);
+	// Don't affect a line with no selected characters
+	if (text_editor->get_selection_to_column(p_caret) == 0) {
+		line--;
+	}
+	return line;
+}
+
 void CodeTextEditor::_error_pressed(const Ref<InputEvent> &p_event) {
 	Ref<InputEventMouseButton> mb = p_event;
 	if (mb.is_valid() && mb->is_pressed() && mb->get_button_index() == MouseButton::LEFT) {
@@ -1990,9 +1965,36 @@ void CodeTextEditor::set_warning_count(int p_warning_count) {
 }
 
 void CodeTextEditor::toggle_bookmark() {
-	for (int i = 0; i < text_editor->get_caret_count(); i++) {
-		int line = text_editor->get_caret_line(i);
-		text_editor->set_line_as_bookmarked(line, !text_editor->is_line_bookmarked(line));
+	Vector<int> caret_edit_order = text_editor->get_caret_index_edit_order();
+	caret_edit_order.reverse();
+	int last_line = -1;
+	for (const int &c : caret_edit_order) {
+		int from = text_editor->has_selection(c) ? text_editor->get_selection_from_line(c) : text_editor->get_caret_line(c);
+		from += from == last_line ? 1 : 0;
+		int to = text_editor->has_selection(c) ? text_editor->get_selection_to_line(c) : text_editor->get_caret_line(c);
+		if (to < from) {
+			continue;
+		}
+		// Check first if there's any bookmarked lines in the selection.
+		bool selection_has_bookmarks = false;
+		for (int line = from; line <= to; line++) {
+			if (text_editor->is_line_bookmarked(line)) {
+				selection_has_bookmarks = true;
+				break;
+			}
+		}
+
+		// Set bookmark on caret or remove all bookmarks from the selection.
+		if (!selection_has_bookmarks) {
+			if (text_editor->get_caret_line(c) != last_line) {
+				text_editor->set_line_as_bookmarked(text_editor->get_caret_line(c), true);
+			}
+		} else {
+			for (int line = from; line <= to; line++) {
+				text_editor->set_line_as_bookmarked(line, false);
+			}
+		}
+		last_line = to;
 	}
 }
 
@@ -2067,6 +2069,7 @@ CodeTextEditor::CodeTextEditor() {
 	text_editor = memnew(CodeEdit);
 	add_child(text_editor);
 	text_editor->set_v_size_flags(SIZE_EXPAND_FILL);
+	text_editor->set_structured_text_bidi_override(TextServer::STRUCTURED_TEXT_GDSCRIPT);
 
 	int ot_mode = EDITOR_GET("interface/editor/code_font_contextual_ligatures");
 	Ref<FontVariation> fc = text_editor->get_theme_font(SNAME("font"));

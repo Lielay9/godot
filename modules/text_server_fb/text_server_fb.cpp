@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  text_server_fb.cpp                                                   */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  text_server_fb.cpp                                                    */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "text_server_fb.h"
 
@@ -34,6 +34,7 @@
 // Headers for building as GDExtension plug-in.
 
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/translation_server.hpp>
@@ -41,7 +42,7 @@
 
 using namespace godot;
 
-#define GLOBAL_GET(m_var) ProjectSettings::get_singleton()->get(m_var)
+#define GLOBAL_GET(m_var) ProjectSettings::get_singleton()->get_setting_with_override(m_var)
 
 #else
 // Headers for building as built-in module.
@@ -49,7 +50,7 @@ using namespace godot;
 #include "core/config/project_settings.h"
 #include "core/error/error_macros.h"
 #include "core/string/print_string.h"
-#include "core/string/ucaps.h"
+#include "core/string/translation.h"
 
 #include "modules/modules_enabled.gen.h" // For freetype, msdfgen, svg.
 
@@ -65,7 +66,9 @@ using namespace godot;
 #endif
 
 #ifdef MODULE_SVG_ENABLED
+#ifdef MODULE_FREETYPE_ENABLED
 #include "thorvg_svg_in_ot.h"
+#endif
 #endif
 
 /*************************************************************************/
@@ -112,12 +115,20 @@ int64_t TextServerFallback::_get_features() const {
 void TextServerFallback::_free_rid(const RID &p_rid) {
 	_THREAD_SAFE_METHOD_
 	if (font_owner.owns(p_rid)) {
+		MutexLock ftlock(ft_mutex);
+
 		FontFallback *fd = font_owner.get_or_null(p_rid);
-		font_owner.free(p_rid);
+		{
+			MutexLock lock(fd->mutex);
+			font_owner.free(p_rid);
+		}
 		memdelete(fd);
 	} else if (shaped_owner.owns(p_rid)) {
 		ShapedTextDataFallback *sd = shaped_owner.get_or_null(p_rid);
-		shaped_owner.free(p_rid);
+		{
+			MutexLock lock(sd->mutex);
+			shaped_owner.free(p_rid);
+		}
 		memdelete(sd);
 	}
 }
@@ -240,11 +251,7 @@ _FORCE_INLINE_ TextServerFallback::FontTexturePosition TextServerFallback::find_
 		// Could not find texture to fit, create one.
 		int texsize = MAX(p_data->size.x * p_data->oversampling * 8, 256);
 
-#ifdef GDEXTENSION
-		texsize = Math::next_power_of_2(texsize);
-#else
 		texsize = next_power_of_2(texsize);
-#endif
 
 		if (p_msdf) {
 			texsize = MIN(texsize, 2048);
@@ -252,18 +259,10 @@ _FORCE_INLINE_ TextServerFallback::FontTexturePosition TextServerFallback::find_
 			texsize = MIN(texsize, 1024);
 		}
 		if (mw > texsize) { // Special case, adapt to it?
-#ifdef GDEXTENSION
-			texsize = Math::next_power_of_2(mw);
-#else
 			texsize = next_power_of_2(mw);
-#endif
 		}
 		if (mh > texsize) { // Special case, adapt to it?
-#ifdef GDEXTENSION
-			texsize = Math::next_power_of_2(mh);
-#else
 			texsize = next_power_of_2(mh);
-#endif
 		}
 
 		ShelfPackTexture tex = ShelfPackTexture(texsize, texsize);
@@ -366,14 +365,14 @@ static int ft_cubic_to(const FT_Vector *control1, const FT_Vector *control2, con
 	return 0;
 }
 
-void TextServerFallback::_generateMTSDF_threaded(uint32_t y, void *p_td) const {
+void TextServerFallback::_generateMTSDF_threaded(void *p_td, uint32_t p_y) {
 	MSDFThreadData *td = static_cast<MSDFThreadData *>(p_td);
 
 	msdfgen::ShapeDistanceFinder<msdfgen::OverlappingContourCombiner<msdfgen::MultiAndTrueDistanceSelector>> distanceFinder(*td->shape);
-	int row = td->shape->inverseYAxis ? td->output->height() - y - 1 : y;
+	int row = td->shape->inverseYAxis ? td->output->height() - p_y - 1 : p_y;
 	for (int col = 0; col < td->output->width(); ++col) {
-		int x = (y % 2) ? td->output->width() - col - 1 : col;
-		msdfgen::Point2 p = td->projection->unproject(msdfgen::Point2(x + .5, y + .5));
+		int x = (p_y % 2) ? td->output->width() - col - 1 : col;
+		msdfgen::Point2 p = td->projection->unproject(msdfgen::Point2(x + .5, p_y + .5));
 		msdfgen::MultiAndTrueDistance distance = distanceFinder.distance(p);
 		td->distancePixelConversion->operator()(td->output->operator()(x, row), distance);
 	}
@@ -443,14 +442,8 @@ _FORCE_INLINE_ TextServerFallback::FontGlyph TextServerFallback::rasterize_msdf(
 		td.projection = &projection;
 		td.distancePixelConversion = &distancePixelConversion;
 
-#ifdef GDEXTENSION
-		for (int i = 0; i < h; i++) {
-			_generateMTSDF_threaded(i, &td);
-		}
-#else
-		WorkerThreadPool::GroupID group_id = WorkerThreadPool::get_singleton()->add_template_group_task(this, &TextServerFallback::_generateMTSDF_threaded, &td, h, -1, true, SNAME("TextServerFBRenderMSDF"));
-		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_id);
-#endif
+		WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_native_group_task(&TextServerFallback::_generateMTSDF_threaded, &td, h, -1, true, String("TextServerFBRenderMSDF"));
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
 
 		msdfgen::msdfErrorCorrection(image, shape, projection, p_pixel_range, config);
 
@@ -771,45 +764,48 @@ _FORCE_INLINE_ bool TextServerFallback::_ensure_cache_for_size(FontFallback *p_f
 		// Init dynamic font.
 #ifdef MODULE_FREETYPE_ENABLED
 		int error = 0;
-		if (!ft_library) {
-			error = FT_Init_FreeType(&ft_library);
-			if (error != 0) {
-				memdelete(fd);
-				ERR_FAIL_V_MSG(false, "FreeType: Error initializing library: '" + String(FT_Error_String(error)) + "'.");
-			}
+		{
+			MutexLock ftlock(ft_mutex);
+			if (!ft_library) {
+				error = FT_Init_FreeType(&ft_library);
+				if (error != 0) {
+					memdelete(fd);
+					ERR_FAIL_V_MSG(false, "FreeType: Error initializing library: '" + String(FT_Error_String(error)) + "'.");
+				}
 #ifdef MODULE_SVG_ENABLED
-			FT_Property_Set(ft_library, "ot-svg", "svg-hooks", get_tvg_svg_in_ot_hooks());
+				FT_Property_Set(ft_library, "ot-svg", "svg-hooks", get_tvg_svg_in_ot_hooks());
 #endif
-		}
+			}
 
-		memset(&fd->stream, 0, sizeof(FT_StreamRec));
-		fd->stream.base = (unsigned char *)p_font_data->data_ptr;
-		fd->stream.size = p_font_data->data_size;
-		fd->stream.pos = 0;
+			memset(&fd->stream, 0, sizeof(FT_StreamRec));
+			fd->stream.base = (unsigned char *)p_font_data->data_ptr;
+			fd->stream.size = p_font_data->data_size;
+			fd->stream.pos = 0;
 
-		FT_Open_Args fargs;
-		memset(&fargs, 0, sizeof(FT_Open_Args));
-		fargs.memory_base = (unsigned char *)p_font_data->data_ptr;
-		fargs.memory_size = p_font_data->data_size;
-		fargs.flags = FT_OPEN_MEMORY;
-		fargs.stream = &fd->stream;
+			FT_Open_Args fargs;
+			memset(&fargs, 0, sizeof(FT_Open_Args));
+			fargs.memory_base = (unsigned char *)p_font_data->data_ptr;
+			fargs.memory_size = p_font_data->data_size;
+			fargs.flags = FT_OPEN_MEMORY;
+			fargs.stream = &fd->stream;
 
-		int max_index = 0;
-		FT_Face tmp_face = nullptr;
-		error = FT_Open_Face(ft_library, &fargs, -1, &tmp_face);
-		if (tmp_face && error == 0) {
-			max_index = tmp_face->num_faces - 1;
-		}
-		if (tmp_face) {
-			FT_Done_Face(tmp_face);
-		}
+			int max_index = 0;
+			FT_Face tmp_face = nullptr;
+			error = FT_Open_Face(ft_library, &fargs, -1, &tmp_face);
+			if (tmp_face && error == 0) {
+				max_index = tmp_face->num_faces - 1;
+			}
+			if (tmp_face) {
+				FT_Done_Face(tmp_face);
+			}
 
-		error = FT_Open_Face(ft_library, &fargs, CLAMP(p_font_data->face_index, 0, max_index), &fd->face);
-		if (error) {
-			FT_Done_Face(fd->face);
-			fd->face = nullptr;
-			memdelete(fd);
-			ERR_FAIL_V_MSG(false, "FreeType: Error loading font: '" + String(FT_Error_String(error)) + "'.");
+			error = FT_Open_Face(ft_library, &fargs, CLAMP(p_font_data->face_index, 0, max_index), &fd->face);
+			if (error) {
+				FT_Done_Face(fd->face);
+				fd->face = nullptr;
+				memdelete(fd);
+				ERR_FAIL_V_MSG(false, "FreeType: Error loading font: '" + String(FT_Error_String(error)) + "'.");
+			}
 		}
 
 		if (p_font_data->msdf) {
@@ -836,7 +832,9 @@ _FORCE_INLINE_ bool TextServerFallback::_ensure_cache_for_size(FontFallback *p_f
 			FT_Select_Size(fd->face, best_match);
 		} else {
 			FT_Set_Pixel_Sizes(fd->face, 0, Math::round(fd->size.x * fd->oversampling));
-			fd->scale = ((double)fd->size.x * fd->oversampling) / (double)fd->face->size->metrics.y_ppem;
+			if (fd->face->size->metrics.y_ppem != 0) {
+				fd->scale = ((double)fd->size.x * fd->oversampling) / (double)fd->face->size->metrics.y_ppem;
+			}
 		}
 
 		fd->ascent = (fd->face->size->metrics.ascender / 64.0) / fd->oversampling * fd->scale;
@@ -852,11 +850,13 @@ _FORCE_INLINE_ bool TextServerFallback::_ensure_cache_for_size(FontFallback *p_f
 			if (fd->face->style_name != nullptr) {
 				p_font_data->style_name = String::utf8((const char *)fd->face->style_name);
 			}
+			p_font_data->weight = _font_get_weight_by_name(p_font_data->style_name.to_lower());
+			p_font_data->stretch = _font_get_stretch_by_name(p_font_data->style_name.to_lower());
 			p_font_data->style_flags = 0;
-			if (fd->face->style_flags & FT_STYLE_FLAG_BOLD) {
+			if ((fd->face->style_flags & FT_STYLE_FLAG_BOLD) || p_font_data->weight >= 700) {
 				p_font_data->style_flags.set_flag(FONT_BOLD);
 			}
-			if (fd->face->style_flags & FT_STYLE_FLAG_ITALIC) {
+			if ((fd->face->style_flags & FT_STYLE_FLAG_ITALIC) || _is_ital_style(p_font_data->style_name.to_lower())) {
 				p_font_data->style_flags.set_flag(FONT_ITALIC);
 			}
 			if (fd->face->face_flags & FT_FACE_FLAG_FIXED_WIDTH) {
@@ -916,6 +916,8 @@ _FORCE_INLINE_ bool TextServerFallback::_ensure_cache_for_size(FontFallback *p_f
 }
 
 _FORCE_INLINE_ void TextServerFallback::_font_clear_cache(FontFallback *p_font_data) {
+	MutexLock ftlock(ft_mutex);
+
 	for (const KeyValue<Vector2i, FontForSizeFallback *> &E : p_font_data->cache) {
 		memdelete(E.value);
 	}
@@ -1019,6 +1021,8 @@ int64_t TextServerFallback::_font_get_face_count(const RID &p_font_rid) const {
 		fargs.flags = FT_OPEN_MEMORY;
 		fargs.stream = &stream;
 
+		MutexLock ftlock(ft_mutex);
+
 		FT_Face tmp_face = nullptr;
 		error = FT_Open_Face(ft_library, &fargs, -1, &tmp_face);
 		if (error == 0) {
@@ -1059,6 +1063,46 @@ String TextServerFallback::_font_get_style_name(const RID &p_font_rid) const {
 	Vector2i size = _get_size(fd, 16);
 	ERR_FAIL_COND_V(!_ensure_cache_for_size(fd, size), String());
 	return fd->style_name;
+}
+
+void TextServerFallback::_font_set_weight(const RID &p_font_rid, int64_t p_weight) {
+	FontFallback *fd = font_owner.get_or_null(p_font_rid);
+	ERR_FAIL_COND(!fd);
+
+	MutexLock lock(fd->mutex);
+	Vector2i size = _get_size(fd, 16);
+	ERR_FAIL_COND(!_ensure_cache_for_size(fd, size));
+	fd->weight = CLAMP(p_weight, 100, 999);
+}
+
+int64_t TextServerFallback::_font_get_weight(const RID &p_font_rid) const {
+	FontFallback *fd = font_owner.get_or_null(p_font_rid);
+	ERR_FAIL_COND_V(!fd, 400);
+
+	MutexLock lock(fd->mutex);
+	Vector2i size = _get_size(fd, 16);
+	ERR_FAIL_COND_V(!_ensure_cache_for_size(fd, size), 400);
+	return fd->weight;
+}
+
+void TextServerFallback::_font_set_stretch(const RID &p_font_rid, int64_t p_stretch) {
+	FontFallback *fd = font_owner.get_or_null(p_font_rid);
+	ERR_FAIL_COND(!fd);
+
+	MutexLock lock(fd->mutex);
+	Vector2i size = _get_size(fd, 16);
+	ERR_FAIL_COND(!_ensure_cache_for_size(fd, size));
+	fd->stretch = CLAMP(p_stretch, 50, 200);
+}
+
+int64_t TextServerFallback::_font_get_stretch(const RID &p_font_rid) const {
+	FontFallback *fd = font_owner.get_or_null(p_font_rid);
+	ERR_FAIL_COND_V(!fd, 100);
+
+	MutexLock lock(fd->mutex);
+	Vector2i size = _get_size(fd, 16);
+	ERR_FAIL_COND_V(!_ensure_cache_for_size(fd, size), 100);
+	return fd->stretch;
 }
 
 void TextServerFallback::_font_set_name(const RID &p_font_rid, const String &p_name) {
@@ -1195,6 +1239,22 @@ int64_t TextServerFallback::_font_get_fixed_size(const RID &p_font_rid) const {
 
 	MutexLock lock(fd->mutex);
 	return fd->fixed_size;
+}
+
+void TextServerFallback::_font_set_allow_system_fallback(const RID &p_font_rid, bool p_allow_system_fallback) {
+	FontFallback *fd = font_owner.get_or_null(p_font_rid);
+	ERR_FAIL_COND(!fd);
+
+	MutexLock lock(fd->mutex);
+	fd->allow_system_fallback = p_allow_system_fallback;
+}
+
+bool TextServerFallback::_font_is_allow_system_fallback(const RID &p_font_rid) const {
+	FontFallback *fd = font_owner.get_or_null(p_font_rid);
+	ERR_FAIL_COND_V(!fd, false);
+
+	MutexLock lock(fd->mutex);
+	return fd->allow_system_fallback;
 }
 
 void TextServerFallback::_font_set_force_autohinter(const RID &p_font_rid, bool p_force_autohinter) {
@@ -1344,6 +1404,7 @@ void TextServerFallback::_font_clear_size_cache(const RID &p_font_rid) {
 	ERR_FAIL_COND(!fd);
 
 	MutexLock lock(fd->mutex);
+	MutexLock ftlock(ft_mutex);
 	for (const KeyValue<Vector2i, FontForSizeFallback *> &E : fd->cache) {
 		memdelete(E.value);
 	}
@@ -1355,6 +1416,7 @@ void TextServerFallback::_font_remove_size_cache(const RID &p_font_rid, const Ve
 	ERR_FAIL_COND(!fd);
 
 	MutexLock lock(fd->mutex);
+	MutexLock ftlock(ft_mutex);
 	if (fd->cache.has(p_size)) {
 		memdelete(fd->cache[p_size]);
 		fd->cache.erase(p_size);
@@ -2113,6 +2175,10 @@ int64_t TextServerFallback::_font_get_glyph_index(const RID &p_font_rid, int64_t
 	return (int64_t)p_char;
 }
 
+int64_t TextServerFallback::_font_get_char_from_glyph_index(const RID &p_font_rid, int64_t p_size, int64_t p_glyph_index) const {
+	return p_glyph_index;
+}
+
 bool TextServerFallback::_font_has_char(const RID &p_font_rid, int64_t p_char) const {
 	FontFallback *fd = font_owner.get_or_null(p_font_rid);
 	ERR_FAIL_COND_V_MSG((p_char >= 0xd800 && p_char <= 0xdfff) || (p_char > 0x10ffff), false, "Unicode parsing error: Invalid unicode codepoint " + String::num_int64(p_char, 16) + ".");
@@ -2299,7 +2365,7 @@ void TextServerFallback::_font_draw_glyph(const RID &p_font_rid, const RID &p_ca
 					Point2 cpos = p_pos;
 					cpos += gl.rect.position * (double)p_size / (double)fd->msdf_source_size;
 					Size2 csize = gl.rect.size * (double)p_size / (double)fd->msdf_source_size;
-					RenderingServer::get_singleton()->canvas_item_add_msdf_texture_rect_region(p_canvas, Rect2(cpos, csize), texture, gl.uv_rect, modulate, 0, fd->msdf_range);
+					RenderingServer::get_singleton()->canvas_item_add_msdf_texture_rect_region(p_canvas, Rect2(cpos, csize), texture, gl.uv_rect, modulate, 0, fd->msdf_range, (double)p_size / (double)fd->msdf_source_size);
 				} else {
 					Point2 cpos = p_pos;
 					double scale = _font_get_scale(p_font_rid, p_size);
@@ -2391,7 +2457,7 @@ void TextServerFallback::_font_draw_glyph_outline(const RID &p_font_rid, const R
 					Point2 cpos = p_pos;
 					cpos += gl.rect.position * (double)p_size / (double)fd->msdf_source_size;
 					Size2 csize = gl.rect.size * (double)p_size / (double)fd->msdf_source_size;
-					RenderingServer::get_singleton()->canvas_item_add_msdf_texture_rect_region(p_canvas, Rect2(cpos, csize), texture, gl.uv_rect, modulate, p_outline_size * 2, fd->msdf_range);
+					RenderingServer::get_singleton()->canvas_item_add_msdf_texture_rect_region(p_canvas, Rect2(cpos, csize), texture, gl.uv_rect, modulate, p_outline_size, fd->msdf_range, (double)p_size / (double)fd->msdf_source_size);
 				} else {
 					Point2 cpos = p_pos;
 					double scale = _font_get_scale(p_font_rid, p_size);
@@ -2617,6 +2683,7 @@ void TextServerFallback::full_copy(ShapedTextDataFallback *p_shaped) {
 
 RID TextServerFallback::_create_shaped_text(TextServer::Direction p_direction, TextServer::Orientation p_orientation) {
 	_THREAD_SAFE_METHOD_
+	ERR_FAIL_COND_V_MSG(p_direction == DIRECTION_INHERITED, RID(), "Invalid text direction.");
 
 	ShapedTextDataFallback *sd = memnew(ShapedTextDataFallback);
 	sd->direction = p_direction;
@@ -2640,6 +2707,7 @@ void TextServerFallback::_shaped_text_clear(const RID &p_shaped) {
 }
 
 void TextServerFallback::_shaped_text_set_direction(const RID &p_shaped, TextServer::Direction p_direction) {
+	ERR_FAIL_COND_MSG(p_direction == DIRECTION_INHERITED, "Invalid text direction.");
 	if (p_direction == DIRECTION_RTL) {
 		ERR_PRINT_ONCE("Right-to-left layout is not supported by this text server.");
 	}
@@ -2857,7 +2925,7 @@ bool TextServerFallback::_shaped_text_add_string(const RID &p_shaped, const Stri
 	return true;
 }
 
-bool TextServerFallback::_shaped_text_add_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align, int64_t p_length) {
+bool TextServerFallback::_shaped_text_add_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align, int64_t p_length, double p_baseline) {
 	ShapedTextDataFallback *sd = shaped_owner.get_or_null(p_shaped);
 	ERR_FAIL_COND_V(!sd, false);
 
@@ -2878,6 +2946,7 @@ bool TextServerFallback::_shaped_text_add_object(const RID &p_shaped, const Vari
 	obj.inline_align = p_inline_align;
 	obj.rect.size = p_size;
 	obj.pos = span.start;
+	obj.baseline = p_baseline;
 
 	sd->spans.push_back(span);
 	sd->text = sd->text + String::chr(0xfffc).repeat(p_length);
@@ -2888,7 +2957,7 @@ bool TextServerFallback::_shaped_text_add_object(const RID &p_shaped, const Vari
 	return true;
 }
 
-bool TextServerFallback::_shaped_text_resize_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align) {
+bool TextServerFallback::_shaped_text_resize_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align, double p_baseline) {
 	ShapedTextDataFallback *sd = shaped_owner.get_or_null(p_shaped);
 	ERR_FAIL_COND_V(!sd, false);
 
@@ -2896,6 +2965,7 @@ bool TextServerFallback::_shaped_text_resize_object(const RID &p_shaped, const V
 	ERR_FAIL_COND_V(!sd->objects.has(p_key), false);
 	sd->objects[p_key].rect.size = p_size;
 	sd->objects[p_key].inline_align = p_inline_align;
+	sd->objects[p_key].baseline = p_baseline;
 	if (sd->valid) {
 		// Recalc string metrics.
 		sd->ascent = 0;
@@ -2982,6 +3052,9 @@ void TextServerFallback::_realign(ShapedTextDataFallback *p_sd) const {
 					case INLINE_ALIGNMENT_CENTER_TO: {
 						E.value.rect.position.y -= E.value.rect.size.y / 2;
 					} break;
+					case INLINE_ALIGNMENT_BASELINE_TO: {
+						E.value.rect.position.y -= E.value.baseline;
+					} break;
 					case INLINE_ALIGNMENT_TOP_TO: {
 						// NOP
 					} break;
@@ -3009,6 +3082,9 @@ void TextServerFallback::_realign(ShapedTextDataFallback *p_sd) const {
 					} break;
 					case INLINE_ALIGNMENT_CENTER_TO: {
 						E.value.rect.position.x -= E.value.rect.size.x / 2;
+					} break;
+					case INLINE_ALIGNMENT_BASELINE_TO: {
+						E.value.rect.position.x -= E.value.baseline;
 					} break;
 					case INLINE_ALIGNMENT_TOP_TO: {
 						// NOP
@@ -3203,7 +3279,7 @@ double TextServerFallback::_shaped_text_fit_to_width(const RID &p_shaped, double
 	for (int i = start_pos; i <= end_pos; i++) {
 		const Glyph &gl = sd->glyphs[i];
 		if (gl.count > 0) {
-			if ((gl.flags & GRAPHEME_IS_SPACE) == GRAPHEME_IS_SPACE) {
+			if ((gl.flags & GRAPHEME_IS_SPACE) == GRAPHEME_IS_SPACE && (gl.flags & GRAPHEME_IS_PUNCTUATION) != GRAPHEME_IS_PUNCTUATION) {
 				space_count++;
 			}
 		}
@@ -3214,7 +3290,7 @@ double TextServerFallback::_shaped_text_fit_to_width(const RID &p_shaped, double
 		for (int i = start_pos; i <= end_pos; i++) {
 			Glyph &gl = sd->glyphs.write[i];
 			if (gl.count > 0) {
-				if ((gl.flags & GRAPHEME_IS_SPACE) == GRAPHEME_IS_SPACE) {
+				if ((gl.flags & GRAPHEME_IS_SPACE) == GRAPHEME_IS_SPACE && (gl.flags & GRAPHEME_IS_PUNCTUATION) != GRAPHEME_IS_PUNCTUATION) {
 					double old_adv = gl.advance;
 					gl.advance = MAX(gl.advance + delta_width_per_space, Math::round(0.1 * gl.font_size));
 					justification_width += (gl.advance - old_adv);
@@ -3313,7 +3389,7 @@ bool TextServerFallback::_shaped_text_update_breaks(const RID &p_shaped) {
 		if (sd_glyphs[i].count > 0) {
 			char32_t c = sd->text[sd_glyphs[i].start - sd->start];
 			if (c_punct_size == 0) {
-				if (is_punct(c) && c != 0x005F) {
+				if (is_punct(c) && c != 0x005F && c != ' ') {
 					sd_glyphs[i].flags |= GRAPHEME_IS_PUNCTUATION;
 				}
 			} else {
@@ -3603,6 +3679,7 @@ bool TextServerFallback::_shaped_text_shape(const RID &p_shaped) {
 			sd->glyphs.push_back(gl);
 		} else {
 			// Text span.
+			RID prev_font;
 			for (int j = span.start; j < span.end; j++) {
 				Glyph gl;
 				gl.start = j;
@@ -3623,6 +3700,170 @@ bool TextServerFallback::_shaped_text_shape(const RID &p_shaped) {
 						break;
 					}
 				}
+				if (!gl.font_rid.is_valid() && prev_font.is_valid()) {
+					if (_font_has_char(prev_font, gl.index)) {
+						gl.font_rid = prev_font;
+					}
+				}
+				if (!gl.font_rid.is_valid() && OS::get_singleton()->has_feature("system_fonts") && span.fonts.size() > 0) {
+					// Try system fallback.
+					RID fdef = span.fonts[0];
+					if (_font_is_allow_system_fallback(fdef)) {
+						String text = sd->text.substr(j, 1);
+						String font_name = _font_get_name(fdef);
+						BitField<FontStyle> font_style = _font_get_style(fdef);
+						int font_weight = _font_get_weight(fdef);
+						int font_stretch = _font_get_stretch(fdef);
+						Dictionary dvar = _font_get_variation_coordinates(fdef);
+						static int64_t wgth_tag = _name_to_tag("weight");
+						static int64_t wdth_tag = _name_to_tag("width");
+						static int64_t ital_tag = _name_to_tag("italic");
+						if (dvar.has(wgth_tag)) {
+							font_weight = dvar[wgth_tag].operator int();
+						}
+						if (dvar.has(wdth_tag)) {
+							font_stretch = dvar[wdth_tag].operator int();
+						}
+						if (dvar.has(ital_tag) && dvar[ital_tag].operator int() == 1) {
+							font_style.set_flag(TextServer::FONT_ITALIC);
+						}
+
+						String locale = (span.language.is_empty()) ? TranslationServer::get_singleton()->get_tool_locale() : span.language;
+
+						PackedStringArray fallback_font_name = OS::get_singleton()->get_system_font_path_for_text(font_name, text, locale, String(), font_weight, font_stretch, font_style & TextServer::FONT_ITALIC);
+#ifdef GDEXTENSION
+						for (int fb = 0; fb < fallback_font_name.size(); fb++) {
+							const String &E = fallback_font_name[fb];
+#else
+						for (const String &E : fallback_font_name) {
+#endif
+							SystemFontKey key = SystemFontKey(E, font_style & TextServer::FONT_ITALIC, font_weight, font_stretch, fdef, this);
+							if (system_fonts.has(key)) {
+								const SystemFontCache &sysf_cache = system_fonts[key];
+								int best_score = 0;
+								int best_match = -1;
+								for (int face_idx = 0; face_idx < sysf_cache.var.size(); face_idx++) {
+									const SystemFontCacheRec &F = sysf_cache.var[face_idx];
+									if (unlikely(!_font_has_char(F.rid, text[0]))) {
+										continue;
+									}
+									BitField<FontStyle> style = _font_get_style(F.rid);
+									int weight = _font_get_weight(F.rid);
+									int stretch = _font_get_stretch(F.rid);
+									int score = (20 - Math::abs(weight - font_weight) / 50);
+									score += (20 - Math::abs(stretch - font_stretch) / 10);
+									if (bool(style & TextServer::FONT_ITALIC) == bool(font_style & TextServer::FONT_ITALIC)) {
+										score += 30;
+									}
+									if (score >= best_score) {
+										best_score = score;
+										best_match = face_idx;
+									}
+									if (best_score == 70) {
+										break;
+									}
+								}
+								if (best_match != -1) {
+									gl.font_rid = sysf_cache.var[best_match].rid;
+								}
+							}
+							if (!gl.font_rid.is_valid()) {
+								if (system_fonts.has(key)) {
+									const SystemFontCache &sysf_cache = system_fonts[key];
+									if (sysf_cache.max_var == sysf_cache.var.size()) {
+										// All subfonts already tested, skip.
+										continue;
+									}
+								}
+
+								if (!system_font_data.has(E)) {
+									system_font_data[E] = FileAccess::get_file_as_bytes(E);
+								}
+
+								const PackedByteArray &font_data = system_font_data[E];
+
+								SystemFontCacheRec sysf;
+								sysf.rid = _create_font();
+								_font_set_data_ptr(sysf.rid, font_data.ptr(), font_data.size());
+
+								Dictionary var = dvar;
+								// Select matching style from collection.
+								int best_score = 0;
+								int best_match = -1;
+								for (int face_idx = 0; face_idx < _font_get_face_count(sysf.rid); face_idx++) {
+									_font_set_face_index(sysf.rid, face_idx);
+									if (unlikely(!_font_has_char(sysf.rid, text[0]))) {
+										continue;
+									}
+									BitField<FontStyle> style = _font_get_style(sysf.rid);
+									int weight = _font_get_weight(sysf.rid);
+									int stretch = _font_get_stretch(sysf.rid);
+									int score = (20 - Math::abs(weight - font_weight) / 50);
+									score += (20 - Math::abs(stretch - font_stretch) / 10);
+									if (bool(style & TextServer::FONT_ITALIC) == bool(font_style & TextServer::FONT_ITALIC)) {
+										score += 30;
+									}
+									if (score >= best_score) {
+										best_score = score;
+										best_match = face_idx;
+									}
+									if (best_score == 70) {
+										break;
+									}
+								}
+								if (best_match == -1) {
+									_free_rid(sysf.rid);
+									continue;
+								} else {
+									_font_set_face_index(sysf.rid, best_match);
+								}
+								sysf.index = best_match;
+
+								// If it's a variable font, apply weight, stretch and italic coordinates to match requested style.
+								if (best_score != 70) {
+									Dictionary ftr = _font_supported_variation_list(sysf.rid);
+									if (ftr.has(wdth_tag)) {
+										var[wdth_tag] = font_stretch;
+										_font_set_stretch(sysf.rid, font_stretch);
+									}
+									if (ftr.has(wgth_tag)) {
+										var[wgth_tag] = font_weight;
+										_font_set_weight(sysf.rid, font_weight);
+									}
+									if ((font_style & TextServer::FONT_ITALIC) && ftr.has(ital_tag)) {
+										var[ital_tag] = 1;
+										_font_set_style(sysf.rid, _font_get_style(sysf.rid) | TextServer::FONT_ITALIC);
+									}
+								}
+
+								_font_set_antialiasing(sysf.rid, key.antialiasing);
+								_font_set_generate_mipmaps(sysf.rid, key.mipmaps);
+								_font_set_multichannel_signed_distance_field(sysf.rid, key.msdf);
+								_font_set_msdf_pixel_range(sysf.rid, key.msdf_range);
+								_font_set_msdf_size(sysf.rid, key.msdf_source_size);
+								_font_set_fixed_size(sysf.rid, key.fixed_size);
+								_font_set_force_autohinter(sysf.rid, key.force_autohinter);
+								_font_set_hinting(sysf.rid, key.hinting);
+								_font_set_subpixel_positioning(sysf.rid, key.subpixel_positioning);
+								_font_set_variation_coordinates(sysf.rid, var);
+								_font_set_oversampling(sysf.rid, key.oversampling);
+								_font_set_embolden(sysf.rid, key.embolden);
+								_font_set_transform(sysf.rid, key.transform);
+
+								if (system_fonts.has(key)) {
+									system_fonts[key].var.push_back(sysf);
+								} else {
+									SystemFontCache &sysf_cache = system_fonts[key];
+									sysf_cache.max_var = _font_get_face_count(sysf.rid);
+									sysf_cache.var.push_back(sysf);
+								}
+								gl.font_rid = sysf.rid;
+							}
+							break;
+						}
+					}
+				}
+				prev_font = gl.font_rid;
 
 				double scale = _font_get_scale(gl.font_rid, gl.font_size);
 				if (gl.font_rid.is_valid()) {
@@ -3839,52 +4080,75 @@ double TextServerFallback::_shaped_text_get_underline_thickness(const RID &p_sha
 }
 
 String TextServerFallback::_string_to_upper(const String &p_string, const String &p_language) const {
-	String upper = p_string;
-
-	for (int i = 0; i <= upper.length(); i++) {
-		const char32_t s = upper[i];
-		const char32_t t = _find_upper(s);
-		if (s != t) { // avoid copy on write
-			upper[i] = t;
-		}
-	}
-
-	return upper;
+	return p_string.to_upper();
 }
 
 String TextServerFallback::_string_to_lower(const String &p_string, const String &p_language) const {
-	String lower = p_string;
-
-	for (int i = 0; i <= lower.length(); i++) {
-		const char32_t s = lower[i];
-		const char32_t t = _find_lower(s);
-		if (s != t) { // avoid copy on write
-			lower[i] = t;
-		}
-	}
-
-	return lower;
+	return p_string.to_lower();
 }
 
-PackedInt32Array TextServerFallback::_string_get_word_breaks(const String &p_string, const String &p_language) const {
+PackedInt32Array TextServerFallback::_string_get_word_breaks(const String &p_string, const String &p_language, int64_t p_chars_per_line) const {
 	PackedInt32Array ret;
+
+	int line_start = 0;
+	int line_end = 0; // End of last word on current line.
+	int word_start = 0; // -1 if no word encountered. Leading spaces are part of a word.
+	int word_length = 0;
+
 	for (int i = 0; i < p_string.length(); i++) {
-		char32_t c = p_string[i];
-		if (c == 0xfffc) {
-			continue;
-		}
-		if (is_punct(c) && c != 0x005F) {
+		const char32_t c = p_string[i];
+
+		if (is_linebreak(c)) {
+			// Force newline.
+			ret.push_back(line_start);
 			ret.push_back(i);
+			line_start = i + 1;
+			line_end = line_start;
+			word_start = line_start;
+			word_length = 0;
+		} else if (c == 0xfffc) {
 			continue;
+		} else if ((is_punct(c) && c != 0x005F) || is_underscore(c) || c == '\t' || is_whitespace(c)) {
+			// A whitespace ends current word.
+			if (word_length > 0) {
+				line_end = i - 1;
+				word_start = -1;
+				word_length = 0;
+			}
+		} else {
+			if (word_start == -1) {
+				word_start = i;
+				if (p_chars_per_line <= 0) {
+					ret.push_back(line_start);
+					ret.push_back(line_end + 1);
+					line_start = word_start;
+					line_end = line_start;
+				}
+			}
+			word_length += 1;
+
+			if (p_chars_per_line > 0) {
+				if (word_length > p_chars_per_line) {
+					// Word too long: wrap before current character.
+					ret.push_back(line_start);
+					ret.push_back(i);
+					line_start = i;
+					line_end = i;
+					word_start = i;
+					word_length = 1;
+				} else if (i - line_start + 1 > p_chars_per_line) {
+					// Line too long: wrap after the last word.
+					ret.push_back(line_start);
+					ret.push_back(line_end + 1);
+					line_start = word_start;
+					line_end = line_start;
+				}
+			}
 		}
-		if (is_underscore(c)) {
-			ret.push_back(i);
-			continue;
-		}
-		if (is_whitespace(c) || is_linebreak(c)) {
-			ret.push_back(i);
-			continue;
-		}
+	}
+	if (line_start < p_string.length()) {
+		ret.push_back(line_start);
+		ret.push_back(p_string.length());
 	}
 	return ret;
 }
@@ -3892,6 +4156,17 @@ PackedInt32Array TextServerFallback::_string_get_word_breaks(const String &p_str
 TextServerFallback::TextServerFallback() {
 	_insert_feature_sets();
 };
+
+void TextServerFallback::_cleanup() {
+	for (const KeyValue<SystemFontKey, SystemFontCache> &E : system_fonts) {
+		const Vector<SystemFontCacheRec> &sysf_cache = E.value.var;
+		for (const SystemFontCacheRec &F : sysf_cache) {
+			_free_rid(F.rid);
+		}
+	}
+	system_fonts.clear();
+	system_font_data.clear();
+}
 
 TextServerFallback::~TextServerFallback() {
 #ifdef MODULE_FREETYPE_ENABLED

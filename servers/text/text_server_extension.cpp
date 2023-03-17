@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  text_server_extension.cpp                                            */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  text_server_extension.cpp                                             */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "text_server_extension.h"
 
@@ -69,6 +69,12 @@ void TextServerExtension::_bind_methods() {
 	GDVIRTUAL_BIND(_font_set_style_name, "font_rid", "name_style");
 	GDVIRTUAL_BIND(_font_get_style_name, "font_rid");
 
+	GDVIRTUAL_BIND(_font_set_weight, "font_rid", "weight");
+	GDVIRTUAL_BIND(_font_get_weight, "font_rid");
+
+	GDVIRTUAL_BIND(_font_set_stretch, "font_rid", "stretch");
+	GDVIRTUAL_BIND(_font_get_stretch, "font_rid");
+
 	GDVIRTUAL_BIND(_font_set_antialiasing, "font_rid", "antialiasing");
 	GDVIRTUAL_BIND(_font_get_antialiasing, "font_rid");
 
@@ -86,6 +92,9 @@ void TextServerExtension::_bind_methods() {
 
 	GDVIRTUAL_BIND(_font_set_fixed_size, "font_rid", "fixed_size");
 	GDVIRTUAL_BIND(_font_get_fixed_size, "font_rid");
+
+	GDVIRTUAL_BIND(_font_set_allow_system_fallback, "font_rid", "allow_system_fallback");
+	GDVIRTUAL_BIND(_font_is_allow_system_fallback, "font_rid");
 
 	GDVIRTUAL_BIND(_font_set_force_autohinter, "font_rid", "force_autohinter");
 	GDVIRTUAL_BIND(_font_is_force_autohinter, "font_rid");
@@ -169,6 +178,7 @@ void TextServerExtension::_bind_methods() {
 	GDVIRTUAL_BIND(_font_get_kerning, "font_rid", "size", "glyph_pair");
 
 	GDVIRTUAL_BIND(_font_get_glyph_index, "font_rid", "size", "char", "variation_selector");
+	GDVIRTUAL_BIND(_font_get_char_from_glyph_index, "font_rid", "size", "glyph_index");
 
 	GDVIRTUAL_BIND(_font_has_char, "font_rid", "char");
 	GDVIRTUAL_BIND(_font_get_supported_chars, "font_rid");
@@ -231,8 +241,8 @@ void TextServerExtension::_bind_methods() {
 	GDVIRTUAL_BIND(_shaped_text_get_spacing, "shaped", "spacing");
 
 	GDVIRTUAL_BIND(_shaped_text_add_string, "shaped", "text", "fonts", "size", "opentype_features", "language", "meta");
-	GDVIRTUAL_BIND(_shaped_text_add_object, "shaped", "key", "size", "inline_align", "length");
-	GDVIRTUAL_BIND(_shaped_text_resize_object, "shaped", "key", "size", "inline_align");
+	GDVIRTUAL_BIND(_shaped_text_add_object, "shaped", "key", "size", "inline_align", "length", "baseline");
+	GDVIRTUAL_BIND(_shaped_text_resize_object, "shaped", "key", "size", "inline_align", "baseline");
 
 	GDVIRTUAL_BIND(_shaped_get_span_count, "shaped");
 	GDVIRTUAL_BIND(_shaped_get_span_meta, "shaped", "index");
@@ -299,7 +309,7 @@ void TextServerExtension::_bind_methods() {
 	GDVIRTUAL_BIND(_strip_diacritics, "string");
 	GDVIRTUAL_BIND(_is_valid_identifier, "string");
 
-	GDVIRTUAL_BIND(_string_get_word_breaks, "string", "language");
+	GDVIRTUAL_BIND(_string_get_word_breaks, "string", "language", "chars_per_line");
 
 	GDVIRTUAL_BIND(_is_confusable, "string", "dict");
 	GDVIRTUAL_BIND(_spoof_check, "string");
@@ -308,6 +318,8 @@ void TextServerExtension::_bind_methods() {
 	GDVIRTUAL_BIND(_string_to_lower, "string", "language");
 
 	GDVIRTUAL_BIND(_parse_structured_text, "parser_type", "args", "text");
+
+	GDVIRTUAL_BIND(_cleanup);
 }
 
 bool TextServerExtension::has_feature(Feature p_feature) const {
@@ -434,6 +446,26 @@ String TextServerExtension::font_get_style_name(const RID &p_font_rid) const {
 	return ret;
 }
 
+void TextServerExtension::font_set_weight(const RID &p_font_rid, int64_t p_weight) {
+	GDVIRTUAL_CALL(_font_set_weight, p_font_rid, p_weight);
+}
+
+int64_t TextServerExtension::font_get_weight(const RID &p_font_rid) const {
+	int64_t ret = 400;
+	GDVIRTUAL_CALL(_font_get_weight, p_font_rid, ret);
+	return ret;
+}
+
+void TextServerExtension::font_set_stretch(const RID &p_font_rid, int64_t p_stretch) {
+	GDVIRTUAL_CALL(_font_set_stretch, p_font_rid, p_stretch);
+}
+
+int64_t TextServerExtension::font_get_stretch(const RID &p_font_rid) const {
+	int64_t ret = 100;
+	GDVIRTUAL_CALL(_font_get_stretch, p_font_rid, ret);
+	return ret;
+}
+
 void TextServerExtension::font_set_name(const RID &p_font_rid, const String &p_name) {
 	GDVIRTUAL_CALL(_font_set_name, p_font_rid, p_name);
 }
@@ -501,6 +533,16 @@ void TextServerExtension::font_set_fixed_size(const RID &p_font_rid, int64_t p_f
 int64_t TextServerExtension::font_get_fixed_size(const RID &p_font_rid) const {
 	int64_t ret = 0;
 	GDVIRTUAL_CALL(_font_get_fixed_size, p_font_rid, ret);
+	return ret;
+}
+
+void TextServerExtension::font_set_allow_system_fallback(const RID &p_font_rid, bool p_allow_system_fallback) {
+	GDVIRTUAL_CALL(_font_set_allow_system_fallback, p_font_rid, p_allow_system_fallback);
+}
+
+bool TextServerExtension::font_is_allow_system_fallback(const RID &p_font_rid) const {
+	bool ret = false;
+	GDVIRTUAL_CALL(_font_is_allow_system_fallback, p_font_rid, ret);
 	return ret;
 }
 
@@ -784,6 +826,12 @@ int64_t TextServerExtension::font_get_glyph_index(const RID &p_font_rid, int64_t
 	return ret;
 }
 
+int64_t TextServerExtension::font_get_char_from_glyph_index(const RID &p_font_rid, int64_t p_size, int64_t p_glyph_index) const {
+	int64_t ret = 0;
+	GDVIRTUAL_CALL(_font_get_char_from_glyph_index, p_font_rid, p_size, p_glyph_index, ret);
+	return ret;
+}
+
 bool TextServerExtension::font_has_char(const RID &p_font_rid, int64_t p_char) const {
 	bool ret = false;
 	GDVIRTUAL_CALL(_font_has_char, p_font_rid, p_char, ret);
@@ -1000,15 +1048,15 @@ bool TextServerExtension::shaped_text_add_string(const RID &p_shaped, const Stri
 	return ret;
 }
 
-bool TextServerExtension::shaped_text_add_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align, int64_t p_length) {
+bool TextServerExtension::shaped_text_add_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align, int64_t p_length, double p_baseline) {
 	bool ret = false;
-	GDVIRTUAL_CALL(_shaped_text_add_object, p_shaped, p_key, p_size, p_inline_align, p_length, ret);
+	GDVIRTUAL_CALL(_shaped_text_add_object, p_shaped, p_key, p_size, p_inline_align, p_length, p_baseline, ret);
 	return ret;
 }
 
-bool TextServerExtension::shaped_text_resize_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align) {
+bool TextServerExtension::shaped_text_resize_object(const RID &p_shaped, const Variant &p_key, const Size2 &p_size, InlineAlignment p_inline_align, double p_baseline) {
 	bool ret = false;
-	GDVIRTUAL_CALL(_shaped_text_resize_object, p_shaped, p_key, p_size, p_inline_align, ret);
+	GDVIRTUAL_CALL(_shaped_text_resize_object, p_shaped, p_key, p_size, p_inline_align, p_baseline, ret);
 	return ret;
 }
 
@@ -1077,13 +1125,13 @@ bool TextServerExtension::shaped_text_is_ready(const RID &p_shaped) const {
 }
 
 const Glyph *TextServerExtension::shaped_text_get_glyphs(const RID &p_shaped) const {
-	GDNativeConstPtr<const Glyph> ret;
+	GDExtensionConstPtr<const Glyph> ret;
 	GDVIRTUAL_CALL(_shaped_text_get_glyphs, p_shaped, ret);
 	return ret;
 }
 
 const Glyph *TextServerExtension::shaped_text_sort_logical(const RID &p_shaped) {
-	GDNativeConstPtr<const Glyph> ret;
+	GDExtensionConstPtr<const Glyph> ret;
 	GDVIRTUAL_CALL(_shaped_text_sort_logical, p_shaped, ret);
 	return ret;
 }
@@ -1137,7 +1185,7 @@ int64_t TextServerExtension::shaped_text_get_ellipsis_pos(const RID &p_shaped) c
 }
 
 const Glyph *TextServerExtension::shaped_text_get_ellipsis_glyphs(const RID &p_shaped) const {
-	GDNativeConstPtr<const Glyph> ret;
+	GDExtensionConstPtr<const Glyph> ret;
 	GDVIRTUAL_CALL(_shaped_text_get_ellipsis_glyphs, p_shaped, ret);
 	return ret;
 }
@@ -1332,15 +1380,15 @@ String TextServerExtension::string_to_lower(const String &p_string, const String
 	return p_string;
 }
 
-TypedArray<Vector2i> TextServerExtension::parse_structured_text(StructuredTextParser p_parser_type, const Array &p_args, const String &p_text) const {
-	TypedArray<Vector2i> ret;
+TypedArray<Vector3i> TextServerExtension::parse_structured_text(StructuredTextParser p_parser_type, const Array &p_args, const String &p_text) const {
+	TypedArray<Vector3i> ret;
 	GDVIRTUAL_CALL(_parse_structured_text, p_parser_type, p_args, p_text, ret);
 	return ret;
 }
 
-PackedInt32Array TextServerExtension::string_get_word_breaks(const String &p_string, const String &p_language) const {
+PackedInt32Array TextServerExtension::string_get_word_breaks(const String &p_string, const String &p_language, int64_t p_chars_per_line) const {
 	PackedInt32Array ret;
-	GDVIRTUAL_CALL(_string_get_word_breaks, p_string, p_language, ret);
+	GDVIRTUAL_CALL(_string_get_word_breaks, p_string, p_language, p_chars_per_line, ret);
 	return ret;
 }
 
@@ -1358,6 +1406,10 @@ bool TextServerExtension::spoof_check(const String &p_string) const {
 		return ret;
 	}
 	return TextServer::spoof_check(p_string);
+}
+
+void TextServerExtension::cleanup() {
+	GDVIRTUAL_CALL(_cleanup);
 }
 
 TextServerExtension::TextServerExtension() {

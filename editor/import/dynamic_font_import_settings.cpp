@@ -1,32 +1,32 @@
-/*************************************************************************/
-/*  dynamic_font_import_settings.cpp                                     */
-/*************************************************************************/
-/*                       This file is part of:                           */
-/*                           GODOT ENGINE                                */
-/*                      https://godotengine.org                          */
-/*************************************************************************/
-/* Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2022 Godot Engine contributors (cf. AUTHORS.md).   */
-/*                                                                       */
-/* Permission is hereby granted, free of charge, to any person obtaining */
-/* a copy of this software and associated documentation files (the       */
-/* "Software"), to deal in the Software without restriction, including   */
-/* without limitation the rights to use, copy, modify, merge, publish,   */
-/* distribute, sublicense, and/or sell copies of the Software, and to    */
-/* permit persons to whom the Software is furnished to do so, subject to */
-/* the following conditions:                                             */
-/*                                                                       */
-/* The above copyright notice and this permission notice shall be        */
-/* included in all copies or substantial portions of the Software.       */
-/*                                                                       */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,       */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF    */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.*/
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY  */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,  */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE     */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
-/*************************************************************************/
+/**************************************************************************/
+/*  dynamic_font_import_settings.cpp                                      */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "dynamic_font_import_settings.h"
 
@@ -36,7 +36,9 @@
 #include "editor/editor_inspector.h"
 #include "editor/editor_locale_dialog.h"
 #include "editor/editor_node.h"
+#include "editor/editor_property_name_processor.h"
 #include "editor/editor_scale.h"
+#include "editor/editor_settings.h"
 
 /*************************************************************************/
 /* Settings data                                                         */
@@ -469,6 +471,8 @@ void DynamicFontImportSettings::_main_prop_changed(const String &p_edited_proper
 			font_preview->set_msdf_pixel_range(import_settings_data->get("msdf_pixel_range"));
 		} else if (p_edited_property == "msdf_size") {
 			font_preview->set_msdf_size(import_settings_data->get("msdf_size"));
+		} else if (p_edited_property == "allow_system_fallback") {
+			font_preview->set_allow_system_fallback(import_settings_data->get("allow_system_fallback"));
 		} else if (p_edited_property == "force_autohinter") {
 			font_preview->set_force_autohinter(import_settings_data->get("force_autohinter"));
 		} else if (p_edited_property == "hinting") {
@@ -526,7 +530,7 @@ void DynamicFontImportSettings::_variation_selected() {
 		inspector_vars->edit(import_variation_data.ptr());
 		import_variation_data->notify_property_list_changed();
 
-		label_glyphs->set_text(TTR("Preloaded glyphs: ") + itos(import_variation_data->selected_glyphs.size()));
+		label_glyphs->set_text(vformat(TTR("Preloaded glyphs: %d"), import_variation_data->selected_glyphs.size()));
 		_range_selected();
 		_change_text_opts();
 
@@ -657,7 +661,7 @@ void DynamicFontImportSettings::_glyph_update_lbl() {
 		}
 	}
 	int unlinked_glyphs = import_variation_data->selected_glyphs.size() - linked_glyphs;
-	label_glyphs->set_text(TTR("Preloaded glyphs:") + " " + itos(unlinked_glyphs + import_variation_data->selected_chars.size()));
+	label_glyphs->set_text(vformat(TTR("Preloaded glyphs: %d"), unlinked_glyphs + import_variation_data->selected_chars.size()));
 }
 
 void DynamicFontImportSettings::_glyph_clear() {
@@ -924,6 +928,15 @@ void DynamicFontImportSettings::_notification(int p_what) {
 		case NOTIFICATION_THEME_CHANGED: {
 			add_var->set_icon(get_theme_icon(SNAME("Add"), SNAME("EditorIcons")));
 		} break;
+
+		case EditorSettings::NOTIFICATION_EDITOR_SETTINGS_CHANGED: {
+			if (EditorSettings::get_singleton()->check_changed_settings_in_group("interface/editor/localize_settings")) {
+				EditorPropertyNameProcessor::Style style = EditorPropertyNameProcessor::get_singleton()->get_settings_style();
+				inspector_general->set_property_name_style(style);
+				inspector_vars->set_property_name_style(style);
+				inspector_text->set_property_name_style(style);
+			}
+		} break;
 	}
 }
 
@@ -936,6 +949,7 @@ void DynamicFontImportSettings::_re_import() {
 	main_settings["multichannel_signed_distance_field"] = import_settings_data->get("multichannel_signed_distance_field");
 	main_settings["msdf_pixel_range"] = import_settings_data->get("msdf_pixel_range");
 	main_settings["msdf_size"] = import_settings_data->get("msdf_size");
+	main_settings["allow_system_fallback"] = import_settings_data->get("allow_system_fallback");
 	main_settings["force_autohinter"] = import_settings_data->get("force_autohinter");
 	main_settings["hinting"] = import_settings_data->get("hinting");
 	main_settings["subpixel_positioning"] = import_settings_data->get("subpixel_positioning");
@@ -951,9 +965,18 @@ void DynamicFontImportSettings::_re_import() {
 		Dictionary preload_config;
 		preload_config["name"] = vars_item->get_text(0);
 
+		Size2i conf_size = Vector2i(16, 0);
 		for (const KeyValue<StringName, Variant> &E : import_variation_data->settings) {
-			preload_config[E.key] = E.value;
+			if (E.key == "size") {
+				conf_size.x = E.value;
+			}
+			if (E.key == "outline_size") {
+				conf_size.y = E.value;
+			} else {
+				preload_config[E.key] = E.value;
+			}
 		}
+		preload_config["size"] = conf_size;
 
 		Array chars;
 		for (const char32_t &E : import_variation_data->selected_chars) {
@@ -1036,7 +1059,7 @@ void DynamicFontImportSettings::_process_locales() {
 
 void DynamicFontImportSettings::open_settings(const String &p_path) {
 	// Load base font data.
-	Vector<uint8_t> font_data = FileAccess::get_file_as_array(p_path);
+	Vector<uint8_t> font_data = FileAccess::get_file_as_bytes(p_path);
 
 	// Load project locale list.
 	locale_tree->clear();
@@ -1202,6 +1225,7 @@ void DynamicFontImportSettings::open_settings(const String &p_path) {
 		font_preview->set_multichannel_signed_distance_field(import_settings_data->get("multichannel_signed_distance_field"));
 		font_preview->set_msdf_pixel_range(import_settings_data->get("msdf_pixel_range"));
 		font_preview->set_msdf_size(import_settings_data->get("msdf_size"));
+		font_preview->set_allow_system_fallback(import_settings_data->get("allow_system_fallback"));
 		font_preview->set_force_autohinter(import_settings_data->get("force_autohinter"));
 		font_preview->set_hinting((TextServer::Hinting)import_settings_data->get("hinting").operator int());
 		font_preview->set_subpixel_positioning((TextServer::SubpixelPositioning)import_settings_data->get("subpixel_positioning").operator int());
@@ -1232,6 +1256,7 @@ DynamicFontImportSettings::DynamicFontImportSettings() {
 	options_general.push_back(ResourceImporter::ImportOption(PropertyInfo(Variant::BOOL, "multichannel_signed_distance_field", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED), true));
 	options_general.push_back(ResourceImporter::ImportOption(PropertyInfo(Variant::INT, "msdf_pixel_range", PROPERTY_HINT_RANGE, "1,100,1"), 8));
 	options_general.push_back(ResourceImporter::ImportOption(PropertyInfo(Variant::INT, "msdf_size", PROPERTY_HINT_RANGE, "1,250,1"), 48));
+	options_general.push_back(ResourceImporter::ImportOption(PropertyInfo(Variant::BOOL, "allow_system_fallback"), true));
 	options_general.push_back(ResourceImporter::ImportOption(PropertyInfo(Variant::BOOL, "force_autohinter"), false));
 	options_general.push_back(ResourceImporter::ImportOption(PropertyInfo(Variant::INT, "hinting", PROPERTY_HINT_ENUM, "None,Light,Normal"), 1));
 	options_general.push_back(ResourceImporter::ImportOption(PropertyInfo(Variant::INT, "subpixel_positioning", PROPERTY_HINT_ENUM, "Disabled,Auto,One Half of a Pixel,One Quarter of a Pixel"), 1));
@@ -1320,6 +1345,7 @@ DynamicFontImportSettings::DynamicFontImportSettings() {
 	inspector_general->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 	inspector_general->set_custom_minimum_size(Size2(300 * EDSCALE, 250 * EDSCALE));
 	inspector_general->connect("property_edited", callable_mp(this, &DynamicFontImportSettings::_main_prop_changed));
+	inspector_general->set_property_name_style(EditorPropertyNameProcessor::get_singleton()->get_settings_style());
 	page1_hb->add_child(inspector_general);
 
 	// Page 2 layout: Configurations
@@ -1372,6 +1398,7 @@ DynamicFontImportSettings::DynamicFontImportSettings() {
 	inspector_vars = memnew(EditorInspector);
 	inspector_vars->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 	inspector_vars->connect("property_edited", callable_mp(this, &DynamicFontImportSettings::_variation_changed));
+	inspector_vars->set_property_name_style(EditorPropertyNameProcessor::get_singleton()->get_settings_style());
 	page2_side_vb->add_child(inspector_vars);
 
 	VBoxContainer *preload_pages_vb = memnew(VBoxContainer);
@@ -1389,7 +1416,7 @@ DynamicFontImportSettings::DynamicFontImportSettings() {
 
 	label_glyphs = memnew(Label);
 	gl_hb->add_child(label_glyphs);
-	label_glyphs->set_text(TTR("Preloaded glyphs:") + " " + itos(0));
+	label_glyphs->set_text(vformat(TTR("Preloaded glyphs: %d"), 0));
 	label_glyphs->set_custom_minimum_size(Size2(50 * EDSCALE, 0));
 
 	Button *btn_clear = memnew(Button);
@@ -1447,6 +1474,7 @@ DynamicFontImportSettings::DynamicFontImportSettings() {
 	inspector_text->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 	inspector_text->set_custom_minimum_size(Size2(300 * EDSCALE, 250 * EDSCALE));
 	inspector_text->connect("property_edited", callable_mp(this, &DynamicFontImportSettings::_change_text_opts));
+	inspector_text->set_property_name_style(EditorPropertyNameProcessor::get_singleton()->get_settings_style());
 	page2_1_hb->add_child(inspector_text);
 
 	text_edit = memnew(TextEdit);
