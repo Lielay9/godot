@@ -1987,7 +1987,7 @@ Key DisplayServerWindows::keyboard_get_keycode_from_physical(Key p_keycode) cons
 	UINT char_code = MapVirtualKeyEx(vk, MAPVK_VK_TO_CHAR, current_layout) & 0x7FFF;
 	// Unlike a similar Linux/BSD check which matches full Latin-1 range,
 	// we limit these to ASCII to fix some layouts, including Arabic ones
-	if (char_code >= 32 && char_code <= 127) {
+	if (char_code >= 32 && char_code <= 255) {
 		// Godot uses 'braces' instead of 'brackets'
 		if (char_code == (unsigned int)Key::BRACKETLEFT || char_code == (unsigned int)Key::BRACKETRIGHT) {
 			char_code += 32;
@@ -2001,37 +2001,24 @@ Key DisplayServerWindows::keyboard_get_keycode_from_physical(Key p_keycode) cons
 Key DisplayServerWindows::keyboard_get_key_label_from_physical(Key p_keycode) const {
 	Key modifiers = p_keycode & KeyModifierMask::MODIFIER_MASK;
 	Key keycode_no_mod = (Key)(p_keycode & KeyModifierMask::CODE_MASK);
-
-	if (keycode_no_mod == Key::PRINT ||
-			keycode_no_mod == Key::KP_ADD ||
-			keycode_no_mod == Key::KP_5 ||
-			(keycode_no_mod >= Key::KEY_0 && keycode_no_mod <= Key::KEY_9)) {
-		return p_keycode;
-	}
-
 	unsigned int scancode = KeyMappingWindows::get_scancode(keycode_no_mod);
 	if (scancode == 0) {
 		return p_keycode;
 	}
 
-	HKL current_layout = GetKeyboardLayout(0);
-	UINT vk = MapVirtualKeyEx(scancode, MAPVK_VSC_TO_VK, current_layout);
-	if (vk == 0) {
-		return p_keycode;
-	}
+	Key key_label = KeyMappingWindows::get_keysym(MapVirtualKey(scancode, MAPVK_VSC_TO_VK));
 
-	UINT char_code = MapVirtualKeyEx(vk, MAPVK_VK_TO_CHAR, current_layout) & 0x7FFF;
-	// Unlike a similar Linux/BSD check which matches full Latin-1 range,
-	// we limit these to ASCII to fix some layouts, including Arabic ones
-	if (char_code >= 32 && char_code <= 127) {
-		// Godot uses 'braces' instead of 'brackets'
-		if (char_code == (unsigned int)Key::BRACKETLEFT || char_code == (unsigned int)Key::BRACKETRIGHT) {
-			char_code += 32;
+	static BYTE keyboard_state[256];
+	memset(keyboard_state, 0, 256);
+	wchar_t chars[256] = {};
+	UINT extended_code = MapVirtualKey(scancode, MAPVK_VSC_TO_VK_EX);
+	if (!(scancode & (1 << 8)) && ToUnicodeEx(extended_code, scancode, keyboard_state, chars, 255, 4, GetKeyboardLayout(0)) > 0) {
+		String keysym = String::utf16((char16_t *)chars, 255);
+		if (!keysym.is_empty()) {
+			key_label = fix_key_label(keysym[0], key_label);
 		}
-		return (Key)(char_code | (unsigned int)modifiers);
 	}
-
-	return (Key)(KeyMappingWindows::get_keysym(vk) | modifiers);
+	return key_label | modifiers;
 }
 
 String _get_full_layout_name_from_registry(HKL p_layout) {
