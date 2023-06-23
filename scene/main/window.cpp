@@ -1014,13 +1014,15 @@ void Window::_update_viewport_size() {
 			screen_size = video_mode;
 		} else if (viewport_aspect < video_mode_aspect) {
 			// screen ratio is smaller vertically
-
 			if (content_scale_aspect == CONTENT_SCALE_ASPECT_KEEP_HEIGHT || content_scale_aspect == CONTENT_SCALE_ASPECT_EXPAND) {
 				//will stretch horizontally
 				viewport_size.x = desired_res.y * video_mode_aspect;
 				viewport_size.y = desired_res.y;
 				screen_size = video_mode;
-
+				if (content_scale_max_aspect_ratio > viewport_aspect && video_mode_aspect > content_scale_max_aspect_ratio) {
+					viewport_size.x = desired_res.y * content_scale_max_aspect_ratio;
+					screen_size.x = video_mode.y * content_scale_max_aspect_ratio;
+				}
 			} else {
 				//will need black bars
 				viewport_size = desired_res;
@@ -1284,6 +1286,17 @@ void Window::_notification(int p_what) {
 			RS::get_singleton()->viewport_set_active(get_viewport_rid(), false);
 		} break;
 	}
+}
+
+void Window::set_content_scale_max_aspect_ratio(real_t p_aspect_ratio) {
+	ERR_MAIN_THREAD_GUARD;
+	content_scale_max_aspect_ratio = p_aspect_ratio;
+	_update_viewport_size();
+}
+
+real_t Window::get_content_scale_max_aspect_ratio() const {
+	ERR_READ_THREAD_GUARD_V(0);
+	return content_scale_max_aspect_ratio;
 }
 
 void Window::set_content_scale_size(const Size2i &p_size) {
@@ -2568,6 +2581,9 @@ void Window::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_contents_minimum_size"), &Window::get_contents_minimum_size);
 
+	ClassDB::bind_method(D_METHOD("set_content_scale_max_aspect_ratio", "aspect_ratio"), &Window::set_content_scale_max_aspect_ratio);
+	ClassDB::bind_method(D_METHOD("get_content_scale_max_aspect_ratio"), &Window::get_content_scale_max_aspect_ratio);
+
 	ClassDB::bind_method(D_METHOD("set_content_scale_size", "size"), &Window::set_content_scale_size);
 	ClassDB::bind_method(D_METHOD("get_content_scale_size"), &Window::get_content_scale_size);
 
@@ -2690,6 +2706,7 @@ void Window::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2I, "max_size", PROPERTY_HINT_NONE, "suffix:px"), "set_max_size", "get_max_size");
 
 	ADD_GROUP("Content Scale", "content_scale_");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "content_scale_max_aspect_ratio"), "set_content_scale_max_aspect_ratio", "get_content_scale_max_aspect_ratio");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2I, "content_scale_size"), "set_content_scale_size", "get_content_scale_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "content_scale_mode", PROPERTY_HINT_ENUM, "Disabled,Canvas Items,Viewport"), "set_content_scale_mode", "get_content_scale_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "content_scale_aspect", PROPERTY_HINT_ENUM, "Ignore,Keep,Keep Width,Keep Height,Expand"), "set_content_scale_aspect", "get_content_scale_aspect");

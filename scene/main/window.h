@@ -130,6 +130,7 @@ private:
 	void _update_child_controls();
 	void _update_embedded_window();
 
+	real_t content_scale_max_aspect_ratio = 0.0;
 	Size2i content_scale_size;
 	ContentScaleMode content_scale_mode = CONTENT_SCALE_MODE_DISABLED;
 	ContentScaleAspect content_scale_aspect = CONTENT_SCALE_ASPECT_IGNORE;
@@ -286,6 +287,9 @@ public:
 
 	bool is_embedded() const;
 	Viewport *get_embedder() const;
+
+	void set_content_scale_max_aspect_ratio(real_t p_aspect_ratio);
+	real_t get_content_scale_max_aspect_ratio() const;
 
 	void set_content_scale_size(const Size2i &p_size);
 	Size2i get_content_scale_size() const;
