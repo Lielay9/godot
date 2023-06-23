@@ -644,7 +644,7 @@ Ref<Image> TextureStorage::_get_gl_image_and_format(const Ref<Image> &p_image, I
 			}
 		} break;
 		default: {
-			ERR_FAIL_V_MSG(Ref<Image>(), "Image Format: " + itos(p_format) + " is not supported by the OpenGL3 Renderer");
+			ERR_FAIL_V_MSG(Ref<Image>(), "The image format " + itos(p_format) + " is not supported by the GL Compatibility rendering backend.");
 		}
 	}
 
@@ -1744,7 +1744,12 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 		GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 		if (status != GL_FRAMEBUFFER_COMPLETE) {
 			glDeleteFramebuffers(1, &rt->fbo);
-			GLES3::Utilities::get_singleton()->texture_free_data(rt->color);
+			if (rt->overridden.color.is_null()) {
+				GLES3::Utilities::get_singleton()->texture_free_data(rt->color);
+			}
+			if (rt->overridden.depth.is_null()) {
+				GLES3::Utilities::get_singleton()->texture_free_data(rt->depth);
+			}
 			rt->fbo = 0;
 			rt->size.x = 0;
 			rt->size.y = 0;
