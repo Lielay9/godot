@@ -796,6 +796,26 @@ void RasterizerCanvasGLES3::_render_items(RID p_to_render_target, int p_item_cou
 					}
 
 				} break;
+				case GLES3::CanvasShaderData::BLEND_MODE_MINIMUM: {
+					glBlendEquationSeparate(GL_MIN, GL_ADD);
+					glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
+
+				} break;
+				case GLES3::CanvasShaderData::BLEND_MODE_MAXIMUM: {
+					glBlendEquation(GL_MAX);
+					glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ONE, GL_ONE);
+
+				} break;
+				case GLES3::CanvasShaderData::BLEND_MODE_SCREEN: {
+					glBlendEquation(GL_FUNC_ADD);
+					glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_COLOR, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+				} break;
+				case GLES3::CanvasShaderData::BLEND_MODE_EXCLUSION: {
+					glBlendEquation(GL_FUNC_ADD);
+					glBlendFuncSeparate(GL_ONE_MINUS_DST_COLOR, GL_ONE_MINUS_SRC_COLOR, GL_ZERO, GL_ONE);
+
+				} break;
 			}
 			last_blend_mode = blend_mode;
 			last_blend_color = blend_color;

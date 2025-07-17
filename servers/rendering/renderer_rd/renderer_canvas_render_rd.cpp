@@ -1560,7 +1560,11 @@ void RendererCanvasRenderRD::CanvasShaderData::set_code(const String &p_code) {
 	actions.render_mode_values["blend_mul"] = Pair<int *, int>(&blend_mode, BLEND_MODE_MUL);
 	actions.render_mode_values["blend_premul_alpha"] = Pair<int *, int>(&blend_mode, BLEND_MODE_PREMULTIPLIED_ALPHA);
 	actions.render_mode_values["blend_disabled"] = Pair<int *, int>(&blend_mode, BLEND_MODE_DISABLED);
-
+	actions.render_mode_values["blend_min"] = Pair<int *, int>(&blend_mode, BLEND_MODE_MINIMUM);
+	actions.render_mode_values["blend_max"] = Pair<int *, int>(&blend_mode, BLEND_MODE_MAXIMUM);
+	actions.render_mode_values["blend_screen"] = Pair<int *, int>(&blend_mode, BLEND_MODE_SCREEN);
+	actions.render_mode_values["blend_exclusion"] = Pair<int *, int>(&blend_mode, BLEND_MODE_EXCLUSION);
+	
 	actions.usage_flag_pointers["texture_sdf"] = &uses_sdf;
 	actions.usage_flag_pointers["TIME"] = &uses_time;
 

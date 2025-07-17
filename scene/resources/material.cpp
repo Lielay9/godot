@@ -787,6 +787,21 @@ void BaseMaterial3D::_update_shader() {
 		case BLEND_MODE_PREMULT_ALPHA:
 			code += "blend_premul_alpha";
 			break;
+		case BLEND_MODE_DISABLED:
+			code += "blend_disabled";
+			break;
+		case BLEND_MODE_MINIMUM:
+			code += "blend_min";
+			break;
+		case BLEND_MODE_MAXIMUM:
+			code += "blend_max";
+			break;
+		case BLEND_MODE_SCREEN:
+			code += "blend_screen";
+			break;
+		case BLEND_MODE_EXCLUSION:
+			code += "blend_exclusion";
+			break;
 		case BLEND_MODE_MAX:
 			break; // Internal value, skip.
 	}
@@ -2036,9 +2051,46 @@ void fragment() {)";
 )";
 			} break;
 			case BLEND_MODE_PREMULT_ALPHA: {
-				// This is unlikely to ever be used for detail textures, and in order for it to function in the editor, another bit must be used in MaterialKey,
-				// but there are only 5 bits left, so I'm going to leave this disabled unless it's actually requested.
-				//code += "\tvec3 detail = (1.0-detail_tex.a)*ALBEDO.rgb+detail_tex.rgb;\n";
+				/*
+				code += R"(
+	// Detail Blend Mode: Premultiplied Alpha
+	vec3 detail = (1.0 - detail_tex.a) * ALBEDO.rgb + detail_tex.rgb
+)";*/
+			} break;
+			case BLEND_MODE_DISABLED: {
+				/*
+				code += R"(
+	// Detail Blend Mode: Disabled
+	vec3 detail = detail_tex.rgb;
+)";*/
+			} break;
+			case BLEND_MODE_MINIMUM: {
+				/*
+				code += R"(
+	// Detail Blend Mode: Minimum
+	vec3 detail = mix(ALBEDO.rgb, min(ALBEDO.rgb, detail_tex.rgb), detail_tex.a);
+)";*/
+			} break;
+			case BLEND_MODE_MAXIMUM: {
+				/*
+				code += R"(
+	// Detail Blend Mode: Maximum
+	vec3 detail = mix(ALBEDO.rgb, max(ALBEDO.rgb, detail_tex.rgb), detail_tex.a);
+)";*/
+			} break;
+			case BLEND_MODE_SCREEN: {
+				/*
+				code += R"(
+	// Detail Blend Mode: Screen
+	vec3 detail = mix(ALBEDO.rgb, detail_tex.rgb + ALBEDO.rgb * (1.0 - detail_tex.rgb), detail_tex.a);
+)";*/
+			} break;
+			case BLEND_MODE_EXCLUSION: {
+				/*
+				code += R"(
+	// Detail Blend Mode: Exclusion
+	vec3 detail = mix(ALBEDO.rgb, detail_tex.rgb * (1.0 - ALBEDO.rgb) + ALBEDO.rgb * (1.0 - detail_tex.rgb), detail_tex.a);
+)";*/
 			} break;
 			case BLEND_MODE_MAX:
 				break; // Internal value, skip.
@@ -3569,7 +3621,7 @@ void BaseMaterial3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "alpha_hash_scale", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_alpha_hash_scale", "get_alpha_hash_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "alpha_antialiasing_mode", PROPERTY_HINT_ENUM, "Disabled,Alpha Edge Blend,Alpha Edge Clip"), "set_alpha_antialiasing", "get_alpha_antialiasing");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "alpha_antialiasing_edge", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_alpha_antialiasing_edge", "get_alpha_antialiasing_edge");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "blend_mode", PROPERTY_HINT_ENUM, "Mix,Add,Subtract,Multiply,Premultiplied Alpha"), "set_blend_mode", "get_blend_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "blend_mode", PROPERTY_HINT_ENUM, "Mix,Add,Subtract,Multiply,Premultiplied Alpha,Disabled,Minimum,Maximum,Screen,Exclusion"), "set_blend_mode", "get_blend_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "cull_mode", PROPERTY_HINT_ENUM, "Back,Front,Disabled"), "set_cull_mode", "get_cull_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "depth_draw_mode", PROPERTY_HINT_ENUM, "Opaque Only,Always,Never"), "set_depth_draw_mode", "get_depth_draw_mode");
 	ADD_PROPERTYI(PropertyInfo(Variant::BOOL, "no_depth_test"), "set_flag", "get_flag", FLAG_DISABLE_DEPTH_TEST);
@@ -3688,6 +3740,7 @@ void BaseMaterial3D::_bind_methods() {
 	ADD_GROUP("Detail", "detail_");
 	ADD_PROPERTYI(PropertyInfo(Variant::BOOL, "detail_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_feature", "get_feature", FEATURE_DETAIL);
 	ADD_PROPERTYI(PropertyInfo(Variant::OBJECT, "detail_mask", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"), "set_texture", "get_texture", TEXTURE_DETAIL_MASK);
+	// Only the 4 most used blend modes are exposed to leave the option to save bits on MaterialKey.
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "detail_blend_mode", PROPERTY_HINT_ENUM, "Mix,Add,Subtract,Multiply"), "set_detail_blend_mode", "get_detail_blend_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "detail_uv_layer", PROPERTY_HINT_ENUM, "UV1,UV2"), "set_detail_uv", "get_detail_uv");
 	ADD_PROPERTYI(PropertyInfo(Variant::OBJECT, "detail_albedo", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"), "set_texture", "get_texture", TEXTURE_DETAIL_ALBEDO);
@@ -3823,6 +3876,11 @@ void BaseMaterial3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(BLEND_MODE_SUB);
 	BIND_ENUM_CONSTANT(BLEND_MODE_MUL);
 	BIND_ENUM_CONSTANT(BLEND_MODE_PREMULT_ALPHA);
+	BIND_ENUM_CONSTANT(BLEND_MODE_DISABLED);
+	BIND_ENUM_CONSTANT(BLEND_MODE_MINIMUM);
+	BIND_ENUM_CONSTANT(BLEND_MODE_MAXIMUM);
+	BIND_ENUM_CONSTANT(BLEND_MODE_SCREEN);
+	BIND_ENUM_CONSTANT(BLEND_MODE_EXCLUSION);
 
 	BIND_ENUM_CONSTANT(ALPHA_ANTIALIASING_OFF);
 	BIND_ENUM_CONSTANT(ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE);

@@ -48,6 +48,24 @@
 		<constant name="BLEND_MODE_PREMULT_ALPHA" value="4" enum="BlendMode">
 			Mix blending mode. Colors are assumed to be premultiplied by the alpha (opacity) value.
 		</constant>
+		<constant name="BLEND_MODE_DISABLED" value="5" enum="BlendMode">
+			Blending is disabled.
+		</constant>
+		<constant name="BLEND_MODE_MINIMUM" value="6" enum="BlendMode">
+			Minimum blending mode. Also known as Darken.
+		</constant>
+		<constant name="BLEND_MODE_MAXIMUM" value="7" enum="BlendMode">
+			Maximum blending mode. Also known as Lighten.
+		</constant>
+		<constant name="BLEND_MODE_SCREEN" value="8" enum="BlendMode">
+			Screen blending mode.
+		</constant>
+		<constant name="BLEND_MODE_EXCLUSION" value="9" enum="BlendMode">
+			Exclusion blending mode.
+		</constant>
+		<constant name="BLEND_MODE_LINEAR_BURN" value="10" enum="BlendMode">
+			Subtractive blending mode where the color is inverted before the subtraction. Internally uses the blending mode [constant BLEND_MODE_SUB].
+		</constant>
 		<constant name="LIGHT_MODE_NORMAL" value="0" enum="LightMode">
 			Render the material using both light and non-light sensitive material properties.
 		</constant>

@@ -3155,6 +3155,13 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 				}
 
 				if (desired_blend_mode != scene_state.current_blend_mode) {
+					if (scene_state.current_blend_mode == GLES3::SceneShaderData::BLEND_MODE_DISABLED) {
+						// re-enable it
+						glEnable(GL_BLEND);
+					} else if (desired_blend_mode == GLES3::SceneShaderData::BLEND_MODE_DISABLED) {
+						// disable it
+						glDisable(GL_BLEND);
+					}
 					switch (desired_blend_mode) {
 						case GLES3::SceneShaderData::BLEND_MODE_MIX: {
 							glBlendEquation(GL_FUNC_ADD);
@@ -3191,6 +3198,29 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 						} break;
 						case GLES3::SceneShaderData::BLEND_MODE_ALPHA_TO_COVERAGE: {
 							// Do nothing for now.
+						} break;
+						case GLES3::SceneShaderData::BLEND_MODE_DISABLED: {
+							// Nothing...
+						} break;
+						case GLES3::SceneShaderData::BLEND_MODE_MINIMUM: {
+							glBlendEquation(GL_MIN);
+							glBlendFunc(GL_ONE, GL_ONE);
+
+						} break;
+						case GLES3::SceneShaderData::BLEND_MODE_MAXIMUM: {
+							glBlendEquation(GL_MAX);
+							glBlendFunc(GL_ONE, GL_ONE);
+
+						} break;
+						case GLES3::SceneShaderData::BLEND_MODE_SCREEN: {
+							glBlendEquation(GL_FUNC_ADD);
+							glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_COLOR, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+						} break;
+						case GLES3::SceneShaderData::BLEND_MODE_EXCLUSION: {
+							glBlendEquation(GL_FUNC_ADD);
+							glBlendFuncSeparate(GL_ONE_MINUS_DST_COLOR, GL_ONE_MINUS_SRC_COLOR, GL_ZERO, GL_ONE);
+
 						} break;
 					}
 					scene_state.current_blend_mode = desired_blend_mode;
